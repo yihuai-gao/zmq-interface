@@ -69,7 +69,11 @@
         "map": "cpp",
         "unordered_set": "cpp",
         "iostream": "cpp",
-        "typeindex": "cpp"
+        "typeindex": "cpp",
+        "list": "cpp",
+        "set": "cpp",
+        "valarray": "cpp",
+        "variant": "cpp"
     },
-    "python.languageServer": "None",
+    // "python.languageServer": "None",
 }

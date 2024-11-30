@@ -1,18 +1,15 @@
-#include "zmq_server.h"
-#include "zmq_message.h"
 
-ZMQServer::ZMQServer(const std::string &endpoint, double max_remaining_time, int max_queue_size,
-                     std::vector<std::string> topics)
-    : context_(1), socket_(context_, zmq::socket_type::rep), max_remaining_time_(max_remaining_time),
-      max_queue_size_(max_queue_size)
+#include "zmq_server.h"
+#include <spdlog/sinks/stdout_color_sinks.h>
+
+ZMQServer::ZMQServer(const std::string &endpoint)
+    : context_(1), socket_(context_, zmq::socket_type::rep), logger_(spdlog::stdout_color_mt("ZMQServer")),
+      running_(false), start_time_(get_time_us())
 {
     socket_.bind(endpoint);
-    for (const std::string &topic : topics)
-    {
-        topic_queues_[topic] = std::deque<std::vector<char>>();
-    }
     running_ = true;
     background_thread_ = std::thread(&ZMQServer::background_loop_, this);
+    data_topics_ = std::unordered_map<std::string, DataTopic>();
 }
 
 ZMQServer::~ZMQServer()
@@ -23,33 +20,73 @@ ZMQServer::~ZMQServer()
     background_thread_.join();
 }
 
+void ZMQServer::add_topic(const std::string &topic, double max_remaining_time)
+{
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    auto it = data_topics_.find(topic);
+    if (it != data_topics_.end())
+    {
+        logger_->warn("Topic {} already exists. Ignoring the request to add it again.", topic);
+        return;
+    }
+    data_topics_.insert({"topic", DataTopic(topic, max_remaining_time)});
+    logger_->info("Added topic {} with max remaining time {}.", topic, max_remaining_time);
+}
+
 void ZMQServer::put_data(const std::string &topic, const std::vector<char> &data)
 {
     std::lock_guard<std::mutex> lock(data_mutex_);
-    topic_queues_[topic].push_back(data);
+    auto it = data_topics_.find(topic);
+    if (it == data_topics_.end())
+    {
+        logger_->warn(
+            "Received data for unknown topic {}. Please first call add_topic to add it into the recorded topics.",
+            topic);
+        return;
+    }
+    it->second.add_data(data, get_time_us() - start_time_);
 }
 
 std::vector<char> ZMQServer::get_latest_data(const std::string &topic)
 {
     std::lock_guard<std::mutex> lock(data_mutex_);
-    return topic_queues_[topic].back();
+    auto it = data_topics_.find(topic);
+    if (it == data_topics_.end())
+    {
+        logger_->warn("Requested latest data for unknown topic {}. Please first call add_topic to add it into the "
+                      "recorded topics.",
+                      topic);
+        return {};
+    }
+    return it->second.get_latest_data();
 }
 
 std::vector<std::vector<char>> ZMQServer::get_all_data(const std::string &topic)
 {
     std::lock_guard<std::mutex> lock(data_mutex_);
-    return std::vector<std::vector<char>>(topic_queues_[topic].begin(), topic_queues_[topic].end());
+    auto it = data_topics_.find(topic);
+    if (it == data_topics_.end())
+    {
+        logger_->warn("Requested all data for unknown topic {}. Please first call add_topic to add it into the "
+                      "recorded topics.",
+                      topic);
+        return std::vector<std::vector<char>>();
+    }
+    return it->second.get_all_data();
 }
 
 std::vector<std::vector<char>> ZMQServer::get_last_k_data(const std::string &topic, int k)
 {
     std::lock_guard<std::mutex> lock(data_mutex_);
-    if (k > topic_queues_[topic].size())
+    auto it = data_topics_.find(topic);
+    if (it == data_topics_.end())
     {
-        k = topic_queues_[topic].size();
-        logger_->warn("Requested more data than available for topic {}. Returning {} data instead.", topic, k);
+        logger_->warn("Requested last k data for unknown topic {}. Please first call add_topic to add it into the "
+                      "recorded topics.",
+                      topic);
+        return {};
     }
-    return std::vector<std::vector<char>>(topic_queues_[topic].end() - k, topic_queues_[topic].end());
+    return it->second.get_last_k_data(k);
 }
 
 void ZMQServer::set_request_with_data_handler(std::function<std::vector<char>(const std::vector<char> &)> handler)
