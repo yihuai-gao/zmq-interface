@@ -42,6 +42,7 @@ PYBIND11_MODULE(zmq_interface, m)
 
     py::class_<ZMQServer>(m, "ZMQServer")
         .def(py::init<const std::string &>())
+        .def("add_topic", &ZMQServer::add_topic)
         .def("put_data", &ZMQServer::put_data)
         .def("get_latest_data", &ZMQServer::get_latest_data)
         .def("get_all_data", &ZMQServer::get_all_data)

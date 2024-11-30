@@ -14,6 +14,7 @@ class ZMQClient
     ~ZMQClient();
 
     std::vector<char> request_latest(const std::string &topic);
+    std::vector<std::vector<char>> request_all(const std::string &topic);
     std::vector<std::vector<char>> request_last_k(const std::string &topic, int k);
     std::vector<char> request_with_data(const std::string &topic, const std::vector<char> &data);
 

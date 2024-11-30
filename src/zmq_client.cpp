@@ -17,6 +17,13 @@ std::vector<char> ZMQClient::request_latest(const std::string &topic)
     return send_message_(message);
 }
 
+std::vector<std::vector<char>> ZMQClient::request_all(const std::string &topic)
+{
+    ZMQMessage message(topic, CmdType::GET_ALL_DATA, {});
+    std::vector<char> reply = send_message_(message);
+    return deserialize_multiple_data_(reply);
+}
+
 std::vector<std::vector<char>> ZMQClient::request_last_k(const std::string &topic, int k)
 {
     ZMQMessage message(topic, CmdType::GET_LAST_K_DATA, std::vector<char>(k));
