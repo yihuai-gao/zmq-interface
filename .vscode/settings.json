@@ -60,7 +60,16 @@
         "typeinfo": "cpp",
         "semaphore": "cpp",
         "stop_token": "cpp",
-        "thread": "cpp"
+        "thread": "cpp",
+        "condition_variable": "cpp",
+        "mutex": "cpp",
+        "charconv": "cpp",
+        "complex": "cpp",
+        "forward_list": "cpp",
+        "map": "cpp",
+        "unordered_set": "cpp",
+        "iostream": "cpp",
+        "typeindex": "cpp"
     },
     "python.languageServer": "None",
 }
