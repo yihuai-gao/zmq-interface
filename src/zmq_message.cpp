@@ -1,7 +1,6 @@
 #include "zmq_message.h"
 
-ZMQMessage::ZMQMessage(const std::string &topic, CmdType cmd, const PythonBytes &data)
-    : topic_(topic), cmd_(cmd), data_(data)
+ZMQMessage::ZMQMessage(const std::string &topic, CmdType cmd, const PythonBytesPtr data_ptr) : topic_(topic), cmd_(cmd)
 {
     if (topic_.size() > 255)
     {
@@ -11,6 +10,24 @@ ZMQMessage::ZMQMessage(const std::string &topic, CmdType cmd, const PythonBytes 
     {
         throw std::invalid_argument("Topic cannot be empty");
     }
+    if (data_ptr == nullptr)
+    {
+        throw std::invalid_argument("Data cannot be null");
+    }
+    data_ = *data_ptr;
+}
+
+ZMQMessage::ZMQMessage(const std::string &topic, CmdType cmd, const std::string &data) : topic_(topic), cmd_(cmd)
+{
+    if (topic_.size() > 255)
+    {
+        throw std::invalid_argument("Topic size must be less than 256 characters");
+    }
+    if (topic_.empty())
+    {
+        throw std::invalid_argument("Topic cannot be empty");
+    }
+    data_ = data;
 }
 
 ZMQMessage::ZMQMessage(const std::string &serialized)
@@ -26,7 +43,7 @@ ZMQMessage::ZMQMessage(const std::string &serialized)
     }
     topic_ = std::string(serialized.begin() + 1, serialized.begin() + 1 + topic_length);
     cmd_ = static_cast<CmdType>(serialized[1 + topic_length]);
-    data_ = PythonBytes(serialized.begin() + 2 + topic_length, serialized.end());
+    data_ = std::string(serialized.begin() + 2 + topic_length, serialized.end());
 }
 
 std::string ZMQMessage::topic() const
@@ -39,7 +56,12 @@ CmdType ZMQMessage::cmd() const
     return cmd_;
 }
 
-PythonBytes ZMQMessage::data() const
+PythonBytesPtr ZMQMessage::data_ptr() const
+{
+    return std::make_shared<pybind11::bytes>(data_);
+}
+
+std::string ZMQMessage::data_str() const
 {
     return data_;
 }

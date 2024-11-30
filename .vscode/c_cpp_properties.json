@@ -6,6 +6,7 @@
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/include",
                 "${HOME}/miniforge3/envs/zmq-py310/include",
+                "${HOME}/miniforge3/envs/zmq-py310/include/python3.10",
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",

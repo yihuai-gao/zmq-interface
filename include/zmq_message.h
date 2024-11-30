@@ -1,9 +1,9 @@
 #pragma once
 
 #include "common.h"
+#include <pybind11/pybind11.h>
 #include <vector>
 #include <zmq.hpp>
-
 enum class CmdType : int
 {
     // Other positive values: to request corresponding number of data
@@ -18,15 +18,17 @@ enum class CmdType : int
 class ZMQMessage
 {
   public:
-    ZMQMessage(const std::string &topic, CmdType cmd, const PythonBytes &data);
+    ZMQMessage(const std::string &topic, CmdType cmd, const PythonBytesPtr data_ptr);
+    ZMQMessage(const std::string &topic, CmdType cmd, const std::string &data_str);
     ZMQMessage(const std::string &serialized);
     std::string topic() const;
     CmdType cmd() const;
-    PythonBytes data() const;
+    PythonBytesPtr data_ptr() const;
+    std::string data_str() const; // Should avoid using it if data has a large size
     std::string serialize() const;
 
   private:
     std::string topic_;
     CmdType cmd_;
-    PythonBytes data_;
+    std::string data_;
 };
