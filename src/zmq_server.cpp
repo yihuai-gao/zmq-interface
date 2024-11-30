@@ -33,7 +33,7 @@ void ZMQServer::add_topic(const std::string &topic, double max_remaining_time)
     logger_->info("Added topic {} with max remaining time {}.", topic, max_remaining_time);
 }
 
-void ZMQServer::put_data(const std::string &topic, const std::vector<char> &data)
+void ZMQServer::put_data(const std::string &topic, const PythonBytes &data)
 {
     std::lock_guard<std::mutex> lock(data_mutex_);
     auto it = data_topics_.find(topic);
@@ -47,7 +47,7 @@ void ZMQServer::put_data(const std::string &topic, const std::vector<char> &data
     it->second.add_data(data, get_time_us() - start_time_);
 }
 
-std::vector<char> ZMQServer::get_latest_data(const std::string &topic)
+PythonBytes ZMQServer::get_latest_data(const std::string &topic)
 {
     std::lock_guard<std::mutex> lock(data_mutex_);
     auto it = data_topics_.find(topic);
@@ -61,7 +61,7 @@ std::vector<char> ZMQServer::get_latest_data(const std::string &topic)
     return it->second.get_latest_data();
 }
 
-std::vector<std::vector<char>> ZMQServer::get_all_data(const std::string &topic)
+std::vector<PythonBytes> ZMQServer::get_all_data(const std::string &topic)
 {
     std::lock_guard<std::mutex> lock(data_mutex_);
     auto it = data_topics_.find(topic);
@@ -70,12 +70,12 @@ std::vector<std::vector<char>> ZMQServer::get_all_data(const std::string &topic)
         logger_->warn("Requested all data for unknown topic {}. Please first call add_topic to add it into the "
                       "recorded topics.",
                       topic);
-        return std::vector<std::vector<char>>();
+        return std::vector<PythonBytes>();
     }
     return it->second.get_all_data();
 }
 
-std::vector<std::vector<char>> ZMQServer::get_last_k_data(const std::string &topic, int k)
+std::vector<PythonBytes> ZMQServer::get_last_k_data(const std::string &topic, int k)
 {
     std::lock_guard<std::mutex> lock(data_mutex_);
     auto it = data_topics_.find(topic);
@@ -89,34 +89,43 @@ std::vector<std::vector<char>> ZMQServer::get_last_k_data(const std::string &top
     return it->second.get_last_k_data(k);
 }
 
-void ZMQServer::set_request_with_data_handler(std::function<std::vector<char>(const std::vector<char> &)> handler)
+void ZMQServer::set_request_with_data_handler(std::function<PythonBytes(const PythonBytes &)> handler)
 {
     request_with_data_handler_initialized_ = true;
     request_with_data_handler_ = handler;
 }
 
-std::vector<char> ZMQServer::serialize_multiple_data_(const std::vector<std::vector<char>> &data)
+PythonBytes ZMQServer::serialize_multiple_data_(const std::vector<PythonBytes> &data)
 {
-    std::vector<char> result;
+    PythonBytes result;
     // first 2 bytes are the number of data
-    std::vector<char> num_data(2);
+    PythonBytes num_data(2, 0);
     *reinterpret_cast<short *>(num_data.data()) = static_cast<short>(data.size());
     result.insert(result.end(), num_data.begin(), num_data.end());
     // next num_data * sizeof(int) bytes are the lengths of the packages
-    std::vector<char> package_lengths(data.size() * sizeof(int));
+    PythonBytes package_lengths(data.size() * sizeof(int), 0);
     for (int i = 0; i < data.size(); ++i)
     {
         *reinterpret_cast<int *>(package_lengths.data() + i * sizeof(int)) = static_cast<int>(data[i].size());
     }
     result.insert(result.end(), package_lengths.begin(), package_lengths.end());
     // the rest of the bytes are the data
-    for (const std::vector<char> &d : data)
+    for (const PythonBytes &d : data)
     {
         result.insert(result.end(), d.begin(), d.end());
     }
     return result;
 }
 
+std::vector<std::string> ZMQServer::get_all_topic_names()
+{
+    std::vector<std::string> result;
+    for (const auto &pair : data_topics_)
+    {
+        result.push_back(pair.first);
+    }
+    return result;
+}
 void ZMQServer::process_request_(const ZMQMessage &message)
 {
     ZMQMessage reply(message.topic(), message.cmd(), {});
@@ -136,8 +145,8 @@ void ZMQServer::process_request_(const ZMQMessage &message)
                                         std::to_string(message.data().size()) + " bytes, expected " +
                                         std::to_string(sizeof(int)) + " bytes";
             logger_->error(error_message);
-            reply = ZMQMessage(message.topic(), CmdType::ERROR,
-                               std::vector<char>(error_message.begin(), error_message.end()));
+            reply =
+                ZMQMessage(message.topic(), CmdType::ERROR, PythonBytes(error_message.begin(), error_message.end()));
             break;
         }
         reply = ZMQMessage(message.topic(), CmdType::GET_LAST_K_DATA,
@@ -148,8 +157,8 @@ void ZMQServer::process_request_(const ZMQMessage &message)
         {
             std::string error_message = "Request with data handler not initialized";
             logger_->error(error_message);
-            reply = ZMQMessage(message.topic(), CmdType::ERROR,
-                               std::vector<char>(error_message.begin(), error_message.end()));
+            reply =
+                ZMQMessage(message.topic(), CmdType::ERROR, PythonBytes(error_message.begin(), error_message.end()));
             break;
         }
         reply = ZMQMessage(message.topic(), CmdType::REQUEST_WITH_DATA, request_with_data_handler_(message.data()));
@@ -157,11 +166,10 @@ void ZMQServer::process_request_(const ZMQMessage &message)
     default:
         std::string error_message = "Received unknown command: " + std::to_string(static_cast<int>(message.cmd()));
         logger_->error(error_message);
-        reply =
-            ZMQMessage(message.topic(), CmdType::ERROR, std::vector<char>(error_message.begin(), error_message.end()));
+        reply = ZMQMessage(message.topic(), CmdType::ERROR, PythonBytes(error_message.begin(), error_message.end()));
         break;
     }
-    std::vector<char> reply_data = reply.serialize();
+    PythonBytes reply_data = reply.serialize();
     socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
 }
 
@@ -171,7 +179,7 @@ void ZMQServer::background_loop_()
     {
         zmq::message_t request;
         socket_.recv(request);
-        ZMQMessage message(std::vector<char>(request.data<char>(), request.data<char>() + request.size()));
+        ZMQMessage message(PythonBytes(request.data<char>(), request.data<char>() + request.size()));
         process_request_(message);
     }
 }

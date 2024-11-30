@@ -1,11 +1,11 @@
-#include <pybind11/functional.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
-
+#include "common.h"
 #include "data_topic.h"
 #include "zmq_client.h"
 #include "zmq_message.h"
 #include "zmq_server.h"
+#include <pybind11/functional.h>
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 
 namespace py = pybind11;
 
@@ -27,8 +27,8 @@ PYBIND11_MODULE(zmq_interface, m)
         .def("get_last_k_data", &DataTopic::get_last_k_data);
 
     py::class_<ZMQMessage>(m, "ZMQMessage")
-        .def(py::init<const std::string &, CmdType, const std::vector<char> &>())
-        .def(py::init<const std::vector<char> &>())
+        .def(py::init<const std::string &, CmdType, const PythonBytes &>())
+        .def(py::init<const PythonBytes &>())
         .def("topic", &ZMQMessage::topic)
         .def("cmd", &ZMQMessage::cmd)
         .def("data", &ZMQMessage::data)
@@ -47,5 +47,6 @@ PYBIND11_MODULE(zmq_interface, m)
         .def("get_latest_data", &ZMQServer::get_latest_data)
         .def("get_all_data", &ZMQServer::get_all_data)
         .def("get_last_k_data", &ZMQServer::get_last_k_data)
+        .def("get_all_topic_names", &ZMQServer::get_all_topic_names)
         .def("set_request_with_data_handler", &ZMQServer::set_request_with_data_handler);
 }

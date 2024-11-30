@@ -33,7 +33,7 @@ class CMakeBuild(build_ext):
         build_args = ["--config", cfg]
 
         cmake_args += [f"-DCMAKE_BUILD_TYPE={cfg}"]
-        build_args += ["--", "-j2"]
+        build_args += ["--", "-j"]
 
         env = os.environ.copy()
         env["CXXFLAGS"] = (

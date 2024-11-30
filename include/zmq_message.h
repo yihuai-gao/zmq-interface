@@ -1,8 +1,8 @@
 #pragma once
 
-#include <zmq.hpp>
-
+#include "common.h"
 #include <vector>
+#include <zmq.hpp>
 
 enum class CmdType : int
 {
@@ -18,15 +18,15 @@ enum class CmdType : int
 class ZMQMessage
 {
   public:
-    ZMQMessage(const std::string &topic, CmdType cmd, const std::vector<char> &data);
-    ZMQMessage(const std::vector<char> &serialized);
+    ZMQMessage(const std::string &topic, CmdType cmd, const PythonBytes &data);
+    ZMQMessage(const std::string &serialized);
     std::string topic() const;
     CmdType cmd() const;
-    std::vector<char> data() const;
-    std::vector<char> serialize() const;
+    PythonBytes data() const;
+    std::string serialize() const;
 
   private:
     std::string topic_;
     CmdType cmd_;
-    std::vector<char> data_;
+    PythonBytes data_;
 };

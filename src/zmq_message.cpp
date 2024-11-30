@@ -1,6 +1,6 @@
 #include "zmq_message.h"
 
-ZMQMessage::ZMQMessage(const std::string &topic, CmdType cmd, const std::vector<char> &data)
+ZMQMessage::ZMQMessage(const std::string &topic, CmdType cmd, const PythonBytes &data)
     : topic_(topic), cmd_(cmd), data_(data)
 {
     if (topic_.size() > 255)
@@ -13,7 +13,7 @@ ZMQMessage::ZMQMessage(const std::string &topic, CmdType cmd, const std::vector<
     }
 }
 
-ZMQMessage::ZMQMessage(const std::vector<char> &serialized)
+ZMQMessage::ZMQMessage(const std::string &serialized)
 {
     if (serialized.size() < 3)
     {
@@ -26,7 +26,7 @@ ZMQMessage::ZMQMessage(const std::vector<char> &serialized)
     }
     topic_ = std::string(serialized.begin() + 1, serialized.begin() + 1 + topic_length);
     cmd_ = static_cast<CmdType>(serialized[1 + topic_length]);
-    data_ = std::vector<char>(serialized.begin() + 2 + topic_length, serialized.end());
+    data_ = PythonBytes(serialized.begin() + 2 + topic_length, serialized.end());
 }
 
 std::string ZMQMessage::topic() const
@@ -39,14 +39,14 @@ CmdType ZMQMessage::cmd() const
     return cmd_;
 }
 
-std::vector<char> ZMQMessage::data() const
+PythonBytes ZMQMessage::data() const
 {
     return data_;
 }
 
-std::vector<char> ZMQMessage::serialize() const
+std::string ZMQMessage::serialize() const
 {
-    std::vector<char> serialized;
+    std::string serialized;
     serialized.push_back(topic_.size());
     serialized.insert(serialized.end(), topic_.begin(), topic_.end());
     serialized.push_back(static_cast<char>(cmd_));
