@@ -25,6 +25,7 @@ set(SOURCES
     src/zmq_message.cpp
     src/zmq_server.cpp
     src/data_topic.cpp
+    src/common.cpp
     src/pybind.cpp
 )
 

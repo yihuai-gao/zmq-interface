@@ -40,7 +40,7 @@ PYBIND11_MODULE(zmq_interface, m)
     //     .def("serialize", &ZMQMessage::serialize);
 
     py::class_<ZMQClient>(m, "ZMQClient")
-        .def(py::init<const std::string &>())
+        .def(py::init<const std::string &, const std::string &>())
         .def("request_latest", &ZMQClient::request_latest)
         .def("request_all", &ZMQClient::request_all)
         .def("request_last_k", &ZMQClient::request_last_k)
@@ -48,7 +48,7 @@ PYBIND11_MODULE(zmq_interface, m)
         .def("request_with_data", &ZMQClient::request_with_data);
 
     py::class_<ZMQServer>(m, "ZMQServer")
-        .def(py::init<const std::string &>())
+        .def(py::init<const std::string &, const std::string &>())
         .def("add_topic", &ZMQServer::add_topic)
         .def("put_data", &ZMQServer::put_data)
         .def("get_latest_data", &ZMQServer::get_latest_data)

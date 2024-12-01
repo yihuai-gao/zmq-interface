@@ -2,9 +2,10 @@
 #include "zmq_server.h"
 #include <spdlog/sinks/stdout_color_sinks.h>
 
-ZMQServer::ZMQServer(const std::string &server_endpoint)
-    : context_(1), socket_(context_, zmq::socket_type::rep), logger_(spdlog::stdout_color_mt("ZMQServer")),
-      running_(false), start_time_(get_time_us()), poller_timeout_ms_(1000)
+ZMQServer::ZMQServer(const std::string &server_name, const std::string &server_endpoint)
+    : server_name_(server_name), context_(1), socket_(context_, zmq::socket_type::rep),
+      logger_(spdlog::stdout_color_mt(server_name)), running_(false), steady_clock_start_time_us_(steady_clock_us()),
+      poller_timeout_ms_(1000)
 {
     socket_.bind(server_endpoint);
     running_ = true;
@@ -46,32 +47,43 @@ void ZMQServer::put_data(const std::string &topic, const PyBytes &data)
         return;
     }
     PyBytesPtr data_ptr = std::make_shared<PyBytes>(data);
-    it->second.add_data_ptr(data_ptr, get_time_us() - start_time_);
+
+    it->second.add_data_ptr(data_ptr, get_timestamp());
 }
 
-PyBytes ZMQServer::get_latest_data(const std::string &topic)
+pybind11::list ZMQServer::get_latest_data(const std::string &topic)
 {
-    return *(get_latest_data_ptr_(topic));
+    pybind11::list result;
+    TimedPtr ptr = get_latest_data_ptr_(topic);
+    result.append(*std::get<0>(ptr));
+    result.append(std::get<1>(ptr));
+    return result;
 }
 
-std::vector<PyBytes> ZMQServer::get_all_data(const std::string &topic)
+pybind11::list ZMQServer::get_all_data(const std::string &topic)
 {
-    std::vector<PyBytesPtr> ptrs = get_all_data_ptrs_(topic);
-    std::vector<PyBytes> result;
-    for (const PyBytesPtr ptr : ptrs)
+    std::vector<TimedPtr> ptrs = get_all_data_ptrs_(topic);
+    pybind11::list result;
+    for (const TimedPtr ptr : ptrs)
     {
-        result.push_back(*ptr);
+        pybind11::list single_result;
+        single_result.append(*std::get<0>(ptr));
+        single_result.append(std::get<1>(ptr));
+        result.append(single_result);
     }
     return result;
 }
 
-std::vector<PyBytes> ZMQServer::get_last_k_data(const std::string &topic, int k)
+pybind11::list ZMQServer::get_last_k_data(const std::string &topic, int k)
 {
-    std::vector<PyBytesPtr> ptrs = get_last_k_data_ptrs_(topic, k);
-    std::vector<PyBytes> result;
-    for (const PyBytesPtr ptr : ptrs)
+    std::vector<TimedPtr> ptrs = get_last_k_data_ptrs_(topic, k);
+    pybind11::list result;
+    for (const TimedPtr ptr : ptrs)
     {
-        result.push_back(*ptr);
+        pybind11::list single_result;
+        single_result.append(*std::get<0>(ptr));
+        single_result.append(std::get<1>(ptr));
+        result.append(single_result);
     }
     return result;
 }
@@ -86,7 +98,18 @@ std::vector<std::string> ZMQServer::get_all_topic_names()
     return result;
 }
 
-PyBytesPtr ZMQServer::get_latest_data_ptr_(const std::string &topic)
+double ZMQServer::get_timestamp()
+{
+    return static_cast<double>(steady_clock_us() - steady_clock_start_time_us_) / 1e6;
+}
+
+void ZMQServer::reset_start_time(int64_t system_time_us)
+{
+    // Use system time to make sure different servers and clients are synchronized
+    steady_clock_start_time_us_ = steady_clock_us() + (system_time_us - system_clock_us());
+}
+
+TimedPtr ZMQServer::get_latest_data_ptr_(const std::string &topic)
 {
     std::lock_guard<std::mutex> lock(data_mutex_);
     auto it = data_topics_.find(topic);
@@ -100,7 +123,7 @@ PyBytesPtr ZMQServer::get_latest_data_ptr_(const std::string &topic)
     return it->second.get_latest_data_ptr();
 }
 
-std::vector<PyBytesPtr> ZMQServer::get_all_data_ptrs_(const std::string &topic)
+std::vector<TimedPtr> ZMQServer::get_all_data_ptrs_(const std::string &topic)
 {
     std::lock_guard<std::mutex> lock(data_mutex_);
     auto it = data_topics_.find(topic);
@@ -109,12 +132,12 @@ std::vector<PyBytesPtr> ZMQServer::get_all_data_ptrs_(const std::string &topic)
         logger_->warn("Requested all data for unknown topic {}. Please first call add_topic to add it into the "
                       "recorded topics.",
                       topic);
-        return std::vector<PyBytesPtr>();
+        return std::vector<TimedPtr>();
     }
     return it->second.get_all_data();
 }
 
-std::vector<PyBytesPtr> ZMQServer::get_last_k_data_ptrs_(const std::string &topic, int k)
+std::vector<TimedPtr> ZMQServer::get_last_k_data_ptrs_(const std::string &topic, int k)
 {
     std::lock_guard<std::mutex> lock(data_mutex_);
     auto it = data_topics_.find(topic);
@@ -165,7 +188,7 @@ void ZMQServer::process_request_(const ZMQMessage &message)
         else
         {
             uint32_t k = bytes_to_uint32(message.data_str());
-            std::vector<PyBytesPtr> pointers = get_last_k_data_ptrs_(message.topic(), k);
+            std::vector<TimedPtr> pointers = get_last_k_data_ptrs_(message.topic(), k);
             ZMQMultiPtrMessage reply(message.topic(), CmdType::GET_LAST_K_DATA, pointers);
             std::string reply_data = reply.serialize();
             socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
@@ -179,7 +202,7 @@ void ZMQServer::process_request_(const ZMQMessage &message)
         {
             std::string error_message = "Request with data handler not initialized";
             logger_->error(error_message);
-            ZMQMessage reply(message.topic(), CmdType::ERROR, error_message);
+            ZMQMessage reply(message.topic(), CmdType::ERROR, error_message, get_timestamp());
             std::string reply_data = reply.serialize();
             socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
             break;
@@ -197,7 +220,7 @@ void ZMQServer::process_request_(const ZMQMessage &message)
     default: {
         std::string error_message = "Received unknown command: " + std::to_string(static_cast<int>(message.cmd()));
         logger_->error(error_message);
-        ZMQMessage reply(message.topic(), CmdType::ERROR, error_message);
+        ZMQMessage reply(message.topic(), CmdType::ERROR, error_message, get_timestamp());
         std::string reply_data = reply.serialize();
         socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
         break;
