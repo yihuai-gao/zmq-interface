@@ -95,9 +95,7 @@ TimedPtr ZMQClient::send_single_block_request_(const ZMQMessage &message)
     socket_.send(request, zmq::send_flags::none);
     zmq::message_t reply;
     socket_.recv(reply);
-    // printf("Receiving message with data: %s\n",
-    //        bytes_to_hex(std::string(reply.data<char>(), reply.data<char>() + reply.size())).c_str());
-    ZMQMessage reply_message(std::string(reply.data<char>(), reply.data<char>() + reply.size()));
+    ZMQMessage reply_message(std::string(reply.data<char>(), reply.data<char>() + reply.size()), get_timestamp());
     if (reply_message.cmd() == CmdType::ERROR)
     {
         throw std::runtime_error("Server returned error: " + reply_message.data_str());

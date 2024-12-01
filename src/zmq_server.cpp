@@ -239,7 +239,8 @@ void ZMQServer::background_loop_()
         if (poller_item_.revents & ZMQ_POLLIN)
         {
             socket_.recv(request);
-            ZMQMessage message(std::string(request.data<char>(), request.data<char>() + request.size()));
+            ZMQMessage message(std::string(request.data<char>(), request.data<char>() + request.size()),
+                               get_timestamp());
             process_request_(message);
         }
     }

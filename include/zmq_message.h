@@ -20,7 +20,7 @@ class ZMQMessage
   public:
     ZMQMessage(const std::string &topic, CmdType cmd, const TimedPtr data_ptr);
     ZMQMessage(const std::string &topic, CmdType cmd, const std::string &data_str, double timestamp);
-    ZMQMessage(const std::string &serialized);
+    ZMQMessage(const std::string &serialized, double timestamp);
     std::string topic() const;
     CmdType cmd() const;
     TimedPtr data_ptr() const;
@@ -46,12 +46,12 @@ class ZMQMultiPtrMessage
     std::string topic() const;
     CmdType cmd() const;
     std::vector<TimedPtr> data_ptrs();
-    std::string data_str() const; // Should avoid using because it may copy a large amount of data
-    std::string serialize() const;
-    static std::string encode_data_blocks(const std::vector<TimedPtr> &data_ptrs);
-    static std::vector<TimedPtr> decode_data_blocks(const std::string &data_str);
+    std::string data_str(); // Should avoid using because it may copy a large amount of data
+    std::string serialize();
 
   private:
+    void encode_data_blocks_();
+    void decode_data_blocks_();
     void check_input_validity_();
     std::string topic_;
     CmdType cmd_;

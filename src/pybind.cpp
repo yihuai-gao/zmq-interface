@@ -44,8 +44,8 @@ PYBIND11_MODULE(zmq_interface, m)
         .def("request_latest", &ZMQClient::request_latest)
         .def("request_all", &ZMQClient::request_all)
         .def("request_last_k", &ZMQClient::request_last_k)
-        .def("get_last_retrieved_data", &ZMQClient::get_last_retrieved_data)
-        .def("request_with_data", &ZMQClient::request_with_data);
+        .def("get_last_retrieved_data", &ZMQClient::get_last_retrieved_data);
+    // .def("request_with_data", &ZMQClient::request_with_data);
 
     py::class_<ZMQServer>(m, "ZMQServer")
         .def(py::init<const std::string &, const std::string &>())

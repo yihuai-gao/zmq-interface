@@ -5,8 +5,8 @@ import numpy as np
 
 
 def test_communication():
-    server = zi.ZMQServer("ipc:///tmp/feeds/0")
-    client = zi.ZMQClient("ipc:///tmp/feeds/0")
+    server = zi.ZMQServer("test_zmq_server", "ipc:///tmp/feeds/0")
+    client = zi.ZMQClient("test_zmq_client", "ipc:///tmp/feeds/0")
     print("Server and client created")
 
     server.add_topic("test", 10)
@@ -44,8 +44,9 @@ def test_communication():
     last_k_data = [pickle.loads(data) for (data, timestamp) in last_k_pickle_data]
     loads_end_time = time.time()
     correctness = [np.allclose(a, b) for a, b in zip(last_k_data, rand_data_list[-5:])]
-    print(f"Request last 5 data. Time: {request_end_time - start_time:.4f}s, load time: {loads_end_time - request_end_time: .4f}, correctness: {np.all(correctness)}")
-
+    print(
+        f"Request last 5 data. Time: {request_end_time - start_time:.4f}s, load time: {loads_end_time - request_end_time: .4f}, correctness: {np.all(correctness)}"
+    )
 
 
 if __name__ == "__main__":

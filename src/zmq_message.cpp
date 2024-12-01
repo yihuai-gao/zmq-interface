@@ -30,7 +30,7 @@ ZMQMessage::ZMQMessage(const std::string &topic, CmdType cmd, const std::string 
     data_ptr_ = std::make_tuple(std::make_shared<PyBytes>(PyBytes(data_str_)), timestamp_);
 }
 
-ZMQMessage::ZMQMessage(const std::string &serialized)
+ZMQMessage::ZMQMessage(const std::string &serialized, double timestamp) : timestamp_(timestamp)
 {
     if (serialized.size() < 3)
     {
@@ -44,6 +44,7 @@ ZMQMessage::ZMQMessage(const std::string &serialized)
     topic_ = std::string(serialized.begin() + sizeof(uint8_t), serialized.begin() + sizeof(uint8_t) + topic_length);
     cmd_ = static_cast<CmdType>(serialized[sizeof(uint8_t) + topic_length]);
     data_str_ = std::string(serialized.begin() + 2 * sizeof(uint8_t) + topic_length, serialized.end());
+    data_ptr_ = std::make_tuple(std::make_shared<PyBytes>(PyBytes(data_str_)), timestamp);
 }
 
 std::string ZMQMessage::topic() const
@@ -82,7 +83,6 @@ ZMQMultiPtrMessage::ZMQMultiPtrMessage(const std::string &topic, CmdType cmd, co
     : topic_(topic), cmd_(cmd), data_ptrs_(data_ptrs)
 {
     check_input_validity_();
-    data_str_ = encode_data_blocks(data_ptrs);
 }
 
 ZMQMultiPtrMessage::ZMQMultiPtrMessage(const std::string &topic, CmdType cmd, const std::string &data_str)
@@ -101,7 +101,6 @@ ZMQMultiPtrMessage::ZMQMultiPtrMessage(const std::string &serialized)
     topic_ = std::string(serialized.begin() + sizeof(uint8_t), serialized.begin() + sizeof(uint8_t) + topic_length);
     cmd_ = static_cast<CmdType>(serialized[sizeof(int8_t) + topic_length]);
     data_str_ = std::string(serialized.begin() + 2 * sizeof(uint8_t) + topic_length, serialized.end());
-    data_ptrs_ = decode_data_blocks(data_str_);
 }
 
 std::string ZMQMultiPtrMessage::topic() const
@@ -122,71 +121,82 @@ std::vector<TimedPtr> ZMQMultiPtrMessage::data_ptrs()
         {
             throw std::runtime_error("Data is empty");
         }
-        data_ptrs_ = decode_data_blocks(data_str_);
+
+        decode_data_blocks_();
     }
     return data_ptrs_;
 }
 
-std::string ZMQMultiPtrMessage::data_str() const
+std::string ZMQMultiPtrMessage::data_str()
 {
+    if (data_str_.empty())
+    {
+        encode_data_blocks_();
+    }
     return data_str_;
 }
 
-std::string ZMQMultiPtrMessage::serialize() const
+std::string ZMQMultiPtrMessage::serialize()
 {
     std::string serialized;
     serialized.push_back(static_cast<char>(uint8_t(topic_.size())));
     serialized.append(topic_);
     serialized.push_back(static_cast<char>(cmd_));
+    if (data_str_.empty())
+    {
+        encode_data_blocks_();
+    }
     serialized.append(data_str_);
     return serialized;
 }
 
-std::string ZMQMultiPtrMessage::encode_data_blocks(const std::vector<TimedPtr> &data_ptrs)
+void ZMQMultiPtrMessage::encode_data_blocks_()
 {
     uint32_t data_string_length = sizeof(uint32_t); // block_num
-    uint32_t block_num = data_ptrs.size();
+    uint32_t block_num = data_ptrs_.size();
     std::vector<uint32_t> data_lengths;
     std::vector<double> timestamps;
-    for (const auto &data_ptr : data_ptrs)
+    for (const auto &data_ptr : data_ptrs_)
     {
         int data_length = pybind11::len(*std::get<0>(data_ptr));
         data_string_length += data_length + sizeof(uint32_t) + sizeof(double);
         data_lengths.push_back(data_length);
         timestamps.push_back(std::get<1>(data_ptr));
     }
-    std::string data_str;
-    data_str.reserve(data_string_length);
-    data_str.append(uint32_to_bytes(block_num));
+    data_str_.clear();
+    data_str_.reserve(data_string_length);
+    data_str_.append(uint32_to_bytes(block_num));
     for (int i = 0; i < block_num; ++i)
     {
-        data_str.append(uint32_to_bytes(data_lengths[i]));
-        data_str.append(double_to_bytes(timestamps[i]));
+        data_str_.append(uint32_to_bytes(data_lengths[i]));
+        data_str_.append(double_to_bytes(timestamps[i]));
     }
     int data_start_index = 1 + block_num;
-    for (const auto &data_ptr : data_ptrs)
+    for (const auto &data_ptr : data_ptrs_)
     {
         std::string data_block_str = *std::get<0>(data_ptr);
-        data_str.append(data_block_str);
+        data_str_.append(data_block_str);
     }
-    assert(data_str.size() == data_string_length);
-    // printf("encode_data_blocks: %s\n", bytes_to_hex(data_str).c_str());
-    return data_str;
+    assert(data_str_.size() == data_string_length);
 }
 
-std::vector<TimedPtr> ZMQMultiPtrMessage::decode_data_blocks(const std::string &data_str)
+void ZMQMultiPtrMessage::decode_data_blocks_()
 {
-    std::vector<TimedPtr> data_ptrs;
-    uint32_t block_num = bytes_to_uint32(std::string(data_str.data(), sizeof(uint32_t)));
+    if (data_str_.size() < sizeof(uint32_t))
+    {
+        throw std::invalid_argument("Data string is too short");
+    }
+    data_ptrs_.clear();
+    uint32_t block_num = bytes_to_uint32(std::string(data_str_.data(), sizeof(uint32_t)));
     int index_size = sizeof(uint32_t) + sizeof(double);
-    int data_start_index = (1 + block_num) * sizeof(uint32_t);
-    // printf("decode_data_blocks: %s\n", bytes_to_hex(data_str).c_str());
+    int data_start_index = (1 + block_num) * sizeof(uint32_t) + block_num * sizeof(double);
+    // printf("decode_data_blocks: %s\n", bytes_to_hex(data_str_).c_str());
     for (int i = 0; i < block_num; ++i)
     {
-        std::string data_length_str(data_str.data() + sizeof(uint32_t) + i * index_size, sizeof(uint32_t));
+        std::string data_length_str(data_str_.data() + sizeof(uint32_t) + i * index_size, sizeof(uint32_t));
 
         uint32_t data_length = bytes_to_uint32(data_length_str);
-        if (data_start_index + data_length > data_str.size())
+        if (data_start_index + data_length > data_str_.size())
         {
             throw std::invalid_argument("Data block length invalid. Please check the data string");
         }
@@ -194,18 +204,17 @@ std::vector<TimedPtr> ZMQMultiPtrMessage::decode_data_blocks(const std::string &
         {
             throw std::invalid_argument("Data block length must be non-negative");
         }
-        std::string data_timestamp_str(data_str.data() + 2 * sizeof(uint32_t) + i * index_size, sizeof(double));
+        std::string data_timestamp_str(data_str_.data() + 2 * sizeof(uint32_t) + i * index_size, sizeof(double));
         double timestamp = bytes_to_double(data_timestamp_str);
         if (data_length == 0)
         {
-            data_ptrs.push_back(std::make_tuple(std::make_shared<PyBytes>(PyBytes("")), timestamp));
+            data_ptrs_.push_back(std::make_tuple(std::make_shared<PyBytes>(PyBytes("")), timestamp));
             continue;
         }
-        data_ptrs.push_back(std::make_tuple(
-            std::make_shared<PyBytes>(PyBytes(data_str.data() + data_start_index, data_length)), timestamp));
+        data_ptrs_.push_back(std::make_tuple(
+            std::make_shared<PyBytes>(PyBytes(data_str_.data() + data_start_index, data_length)), timestamp));
         data_start_index += data_length;
     }
-    return data_ptrs;
 }
 
 void ZMQMultiPtrMessage::check_input_validity_()
