@@ -1,0 +1,47 @@
+import zmq_interface as zi
+import time
+import pickle
+import numpy as np
+import psutil
+
+
+def get_memory_usage():
+    process = psutil.Process()  # Get the current process
+    memory_info = process.memory_info()  # Fetch memory usage details
+    return memory_info.rss / 1024.0 / 1024.0  # Convert bytes to MB
+
+
+def test_timestamps():
+    server = zi.ZMQServer("test_zmq_server", "ipc:///tmp/feeds/0")
+    client = zi.ZMQClient("test_zmq_client", "ipc:///tmp/feeds/0")
+    print("Server and client created")
+
+    topic_name = "test"
+    server.add_topic(topic_name, 10.0)
+
+    current_system_time = zi.system_clock_us()
+
+    # Manually sync the start time of the server and client
+    server.reset_start_time(current_system_time)
+    client.reset_start_time(current_system_time)
+
+    for i in range(1000):
+        rand_data = np.random.rand(1000000)
+        data_bytes = pickle.dumps(rand_data)
+        server.put_data(topic_name, data_bytes)
+        # Because of the shared_ptr, the data is stored in the server even if it is dereferenced in python
+        del data_bytes
+        data, timestamp = server.get_all_data(
+            topic_name
+        )  # only pass the reference so will take zero time
+        print(
+            f"Iter: {i}, data size: {rand_data.nbytes / 1024**2:.3f}MB, stored data size: {len(data)}, memory usage: {get_memory_usage():.3f}MB"
+        )
+        time.sleep(0.01)
+        # data, timestamp = server.get_latest_data(topic_name)
+        # restored_data = pickle.loads(data)
+        # print(np.allclose(rand_data, restored_data))
+
+
+if __name__ == "__main__":
+    test_timestamps()

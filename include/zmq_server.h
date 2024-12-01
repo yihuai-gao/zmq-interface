@@ -21,13 +21,13 @@ class ZMQServer
     void add_topic(const std::string &topic, double max_remaining_time);
     void put_data(const std::string &topic, const PyBytes &data);
     pybind11::list get_latest_data(const std::string &topic);
-    pybind11::list get_all_data(const std::string &topic);
-    pybind11::list get_last_k_data(const std::string &topic, int k);
+    pybind11::tuple get_all_data(const std::string &topic);
+    pybind11::tuple get_last_k_data(const std::string &topic, int k);
     double get_timestamp();
     void reset_start_time(int64_t system_time_us);
 
     // void set_request_with_data_handler(std::function<PyBytes(const PyBytes)> handler);
-    std::vector<std::string> get_all_topic_names();
+    std::unordered_map<std::string, int> get_topic_status();
 
   private:
     const std::string server_name_;

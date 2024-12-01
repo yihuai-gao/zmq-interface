@@ -15,7 +15,7 @@ void DataTopic::add_data_ptr(const PyBytesPtr data_ptr, double timestamp)
     }
 }
 
-std::vector<TimedPtr> DataTopic::get_all_data()
+std::vector<TimedPtr> DataTopic::get_all_data_ptrs()
 {
     return std::vector<TimedPtr>(data_.begin(), data_.end());
 }
@@ -29,11 +29,16 @@ std::vector<TimedPtr> DataTopic::get_last_k_data(int k)
     return std::vector<TimedPtr>(data_.end() - k, data_.end());
 }
 
-TimedPtr DataTopic::get_latest_data_ptr()
+TimedPtr DataTopic::get_latest_data_ptrs()
 {
     if (data_.empty())
     {
         return {};
     }
     return data_.back();
+}
+
+void DataTopic::clear_data()
+{
+    data_.clear();
 }

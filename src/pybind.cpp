@@ -39,12 +39,17 @@ PYBIND11_MODULE(zmq_interface, m)
     //     .def("data", &ZMQMessage::data_ptr)
     //     .def("serialize", &ZMQMessage::serialize);
 
+    m.def("steady_clock_us", &steady_clock_us);
+    m.def("system_clock_us", &system_clock_us);
+
     py::class_<ZMQClient>(m, "ZMQClient")
         .def(py::init<const std::string &, const std::string &>())
         .def("request_latest", &ZMQClient::request_latest)
         .def("request_all", &ZMQClient::request_all)
         .def("request_last_k", &ZMQClient::request_last_k)
-        .def("get_last_retrieved_data", &ZMQClient::get_last_retrieved_data);
+        .def("get_last_retrieved_data", &ZMQClient::get_last_retrieved_data)
+        .def("reset_start_time", &ZMQClient::reset_start_time)
+        .def("get_timestamp", &ZMQClient::get_timestamp);
     // .def("request_with_data", &ZMQClient::request_with_data);
 
     py::class_<ZMQServer>(m, "ZMQServer")
@@ -54,6 +59,8 @@ PYBIND11_MODULE(zmq_interface, m)
         .def("get_latest_data", &ZMQServer::get_latest_data)
         .def("get_all_data", &ZMQServer::get_all_data)
         .def("get_last_k_data", &ZMQServer::get_last_k_data)
-        .def("get_all_topic_names", &ZMQServer::get_all_topic_names);
+        .def("get_topic_status", &ZMQServer::get_topic_status)
+        .def("reset_start_time", &ZMQServer::reset_start_time)
+        .def("get_timestamp", &ZMQServer::get_timestamp);
     // .def("set_request_with_data_handler", &ZMQServer::set_request_with_data_handler);
 }

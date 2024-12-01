@@ -16,10 +16,10 @@ class ZMQClient
     ~ZMQClient();
 
     pybind11::list request_latest(const std::string &topic);
-    pybind11::list request_all(const std::string &topic);
-    pybind11::list request_last_k(const std::string &topic, uint32_t k);
-    pybind11::list request_with_data(const std::string &topic, const PyBytes data_ptr);
-    pybind11::list get_last_retrieved_data();
+    pybind11::tuple request_all(const std::string &topic);
+    pybind11::tuple request_last_k(const std::string &topic, uint32_t k);
+    pybind11::tuple request_with_data(const std::string &topic, const PyBytes data_ptr);
+    pybind11::tuple get_last_retrieved_data();
 
     double get_timestamp();
     void reset_start_time(int64_t system_time_us);

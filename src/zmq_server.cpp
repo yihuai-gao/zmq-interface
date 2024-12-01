@@ -60,40 +60,38 @@ pybind11::list ZMQServer::get_latest_data(const std::string &topic)
     return result;
 }
 
-pybind11::list ZMQServer::get_all_data(const std::string &topic)
+pybind11::tuple ZMQServer::get_all_data(const std::string &topic)
 {
     std::vector<TimedPtr> ptrs = get_all_data_ptrs_(topic);
-    pybind11::list result;
+    pybind11::list data;
+    pybind11::list timestamps;
     for (const TimedPtr ptr : ptrs)
     {
-        pybind11::list single_result;
-        single_result.append(*std::get<0>(ptr));
-        single_result.append(std::get<1>(ptr));
-        result.append(single_result);
+        data.append(*std::get<0>(ptr));
+        timestamps.append(std::get<1>(ptr));
     }
-    return result;
+    return pybind11::make_tuple(data, timestamps);
 }
 
-pybind11::list ZMQServer::get_last_k_data(const std::string &topic, int k)
+pybind11::tuple ZMQServer::get_last_k_data(const std::string &topic, int k)
 {
     std::vector<TimedPtr> ptrs = get_last_k_data_ptrs_(topic, k);
-    pybind11::list result;
+    pybind11::list data;
+    pybind11::list timestamps;
     for (const TimedPtr ptr : ptrs)
     {
-        pybind11::list single_result;
-        single_result.append(*std::get<0>(ptr));
-        single_result.append(std::get<1>(ptr));
-        result.append(single_result);
+        data.append(*std::get<0>(ptr));
+        timestamps.append(std::get<1>(ptr));
     }
-    return result;
+    return pybind11::make_tuple(data, timestamps);
 }
 
-std::vector<std::string> ZMQServer::get_all_topic_names()
+std::unordered_map<std::string, int> ZMQServer::get_topic_status()
 {
-    std::vector<std::string> result;
-    for (const auto &pair : data_topics_)
+    std::unordered_map<std::string, int> result;
+    for (auto &pair : data_topics_)
     {
-        result.push_back(pair.first);
+        result[pair.first] = pair.second.get_all_data_ptrs().size();
     }
     return result;
 }
@@ -105,6 +103,12 @@ double ZMQServer::get_timestamp()
 
 void ZMQServer::reset_start_time(int64_t system_time_us)
 {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    logger_->info("Resetting start time. Will clear all data stored before this time");
+    for (auto &pair : data_topics_)
+    {
+        pair.second.clear_data();
+    }
     // Use system time to make sure different servers and clients are synchronized
     steady_clock_start_time_us_ = steady_clock_us() + (system_time_us - system_clock_us());
 }
@@ -120,7 +124,7 @@ TimedPtr ZMQServer::get_latest_data_ptr_(const std::string &topic)
                       topic);
         return {};
     }
-    return it->second.get_latest_data_ptr();
+    return it->second.get_latest_data_ptrs();
 }
 
 std::vector<TimedPtr> ZMQServer::get_all_data_ptrs_(const std::string &topic)
@@ -134,7 +138,7 @@ std::vector<TimedPtr> ZMQServer::get_all_data_ptrs_(const std::string &topic)
                       topic);
         return std::vector<TimedPtr>();
     }
-    return it->second.get_all_data();
+    return it->second.get_all_data_ptrs();
 }
 
 std::vector<TimedPtr> ZMQServer::get_last_k_data_ptrs_(const std::string &topic, int k)
@@ -216,6 +220,8 @@ void ZMQServer::process_request_(const ZMQMessage &message)
             break;
         }
     }
+
+        // case CmdType::SYNCHRONIZE_TIME
 
     default: {
         std::string error_message = "Received unknown command: " + std::to_string(static_cast<int>(message.cmd()));

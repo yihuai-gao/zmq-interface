@@ -2,6 +2,7 @@ import zmq_interface as zi
 import pickle
 import time
 import numpy as np
+import numpy.typing as npt
 
 
 def test_communication():
@@ -10,7 +11,7 @@ def test_communication():
     print("Server and client created")
 
     server.add_topic("test", 10)
-    rand_data_list = []
+    rand_data_list: list[npt.NDArray[np.float64]] = []
     for k in range(10):
         rand_data = np.random.rand(1000000)
         rand_data_list.append(rand_data)
@@ -29,9 +30,9 @@ def test_communication():
         )
 
     start_time = time.time()
-    all_pickle_data = client.request_all("test")
+    all_pickle_data, all_timestamps = client.request_all("test")
     request_end_time = time.time()
-    all_data = [pickle.loads(data) for (data, timestamp) in all_pickle_data]
+    all_data = [pickle.loads(data) for data in all_pickle_data]
     loads_end_time = time.time()
     correctness = [np.allclose(a, b) for a, b in zip(all_data, rand_data_list)]
     print(
@@ -39,9 +40,9 @@ def test_communication():
     )
 
     start_time = time.time()
-    last_k_pickle_data = client.request_last_k("test", 5)
+    last_k_pickle_data, last_k_timestamps = client.request_last_k("test", 5)
     request_end_time = time.time()
-    last_k_data = [pickle.loads(data) for (data, timestamp) in last_k_pickle_data]
+    last_k_data = [pickle.loads(data) for data in last_k_pickle_data]
     loads_end_time = time.time()
     correctness = [np.allclose(a, b) for a, b in zip(last_k_data, rand_data_list[-5:])]
     print(

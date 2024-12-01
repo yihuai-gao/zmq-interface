@@ -10,9 +10,11 @@ class DataTopic
 
     void add_data_ptr(const PyBytesPtr data_ptr, double timestamp);
 
-    TimedPtr get_latest_data_ptr();
-    std::vector<TimedPtr> get_all_data();
+    TimedPtr get_latest_data_ptrs();
+    std::vector<TimedPtr> get_all_data_ptrs();
     std::vector<TimedPtr> get_last_k_data(int k);
+
+    void clear_data();
 
   private:
     std::string topic_name_;

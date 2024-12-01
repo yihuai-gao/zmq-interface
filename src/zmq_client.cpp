@@ -23,35 +23,33 @@ pybind11::list ZMQClient::request_latest(const std::string &topic)
     return reply;
 }
 
-pybind11::list ZMQClient::request_all(const std::string &topic)
+pybind11::tuple ZMQClient::request_all(const std::string &topic)
 {
     ZMQMessage message(topic, CmdType::GET_ALL_DATA, std::string(), get_timestamp());
     std::vector<TimedPtr> request_ptrs = send_multi_block_request_(message);
-    pybind11::list reply;
+    pybind11::list data;
+    pybind11::list timestamps;
     for (const TimedPtr ptr : request_ptrs)
     {
-        pybind11::list single_reply;
-        single_reply.append(*std::get<0>(ptr));
-        single_reply.append(std::get<1>(ptr));
-        reply.append(single_reply);
+        data.append(*std::get<0>(ptr));
+        timestamps.append(std::get<1>(ptr));
     }
-    return reply;
+    return pybind11::make_tuple(data, timestamps);
 }
 
-pybind11::list ZMQClient::request_last_k(const std::string &topic, uint32_t k)
+pybind11::tuple ZMQClient::request_last_k(const std::string &topic, uint32_t k)
 {
     std::string data_str = uint32_to_bytes(k);
     ZMQMessage message(topic, CmdType::GET_LAST_K_DATA, data_str, get_timestamp());
     std::vector<TimedPtr> request_ptrs = send_multi_block_request_(message);
-    pybind11::list reply;
+    pybind11::list data;
+    pybind11::list timestamps;
     for (const TimedPtr ptr : request_ptrs)
     {
-        pybind11::list single_reply;
-        single_reply.append(*std::get<0>(ptr));
-        single_reply.append(std::get<1>(ptr));
-        reply.append(single_reply);
+        data.append(*std::get<0>(ptr));
+        timestamps.append(std::get<1>(ptr));
     }
-    return reply;
+    return pybind11::make_tuple(data, timestamps);
 }
 
 // PyBytes ZMQClient::request_with_data(const std::string &topic, const PyBytes data)
@@ -61,21 +59,20 @@ pybind11::list ZMQClient::request_last_k(const std::string &topic, uint32_t k)
 //     return *send_single_block_request_(message);
 // }
 
-pybind11::list ZMQClient::get_last_retrieved_data()
+pybind11::tuple ZMQClient::get_last_retrieved_data()
 {
     if (last_retrieved_ptrs_.empty())
     {
-        return pybind11::list();
+        return pybind11::make_tuple(pybind11::list(), pybind11::list());
     }
     pybind11::list data;
+    pybind11::list timestamps;
     for (const TimedPtr ptr : last_retrieved_ptrs_)
     {
-        pybind11::list single_reply;
-        single_reply.append(*std::get<0>(ptr));
-        single_reply.append(std::get<1>(ptr));
-        data.append(single_reply);
+        data.append(*std::get<0>(ptr));
+        timestamps.append(std::get<1>(ptr));
     }
-    return data;
+    return pybind11::make_tuple(data, timestamps);
 }
 
 double ZMQClient::get_timestamp()
@@ -85,6 +82,8 @@ double ZMQClient::get_timestamp()
 
 void ZMQClient::reset_start_time(int64_t system_time_us)
 {
+    logger_->info("Resetting start time. Will clear all data retrieved before this time");
+    last_retrieved_ptrs_.clear();
     steady_clock_start_time_us_ = steady_clock_us() + (system_time_us - system_clock_us());
 }
 
