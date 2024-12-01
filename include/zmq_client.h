@@ -16,7 +16,7 @@ class ZMQClient
 
     PyBytes request_latest(const std::string &topic);
     std::vector<PyBytes> request_all(const std::string &topic);
-    std::vector<PyBytes> request_last_k(const std::string &topic, int k);
+    std::vector<PyBytes> request_last_k(const std::string &topic, uint32_t k);
     PyBytes request_with_data(const std::string &topic, const PyBytes data_ptr);
     std::vector<PyBytes> get_last_retrieved_data();
 

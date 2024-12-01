@@ -29,9 +29,9 @@ std::vector<PyBytes> ZMQClient::request_all(const std::string &topic)
     return reply;
 }
 
-std::vector<PyBytes> ZMQClient::request_last_k(const std::string &topic, int k)
+std::vector<PyBytes> ZMQClient::request_last_k(const std::string &topic, uint32_t k)
 {
-    std::string data_str(reinterpret_cast<const char *>(&k), sizeof(int));
+    std::string data_str = uint32_to_bytes(k);
     ZMQMessage message(topic, CmdType::GET_LAST_K_DATA, data_str);
     std::vector<PyBytesPtr> request_ptrs = send_multi_block_request_(message);
     std::vector<PyBytes> reply;

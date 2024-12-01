@@ -99,7 +99,6 @@ ZMQMultiPtrMessage::ZMQMultiPtrMessage(const std::string &serialized)
         throw std::invalid_argument("Serialized message is too short");
     }
     topic_ = std::string(serialized.begin() + sizeof(uint8_t), serialized.begin() + sizeof(uint8_t) + topic_length);
-    printf("Sizeof CmdType: %d \n", sizeof(CmdType));
     cmd_ = static_cast<CmdType>(serialized[sizeof(int8_t) + topic_length]);
     data_str_ = std::string(serialized.begin() + 2 * sizeof(uint8_t) + topic_length, serialized.end());
     data_ptrs_ = decode_data_blocks(data_str_);
@@ -133,14 +132,24 @@ std::string ZMQMultiPtrMessage::data_str() const
     return data_str_;
 }
 
+std::string ZMQMultiPtrMessage::serialize() const
+{
+    std::string serialized;
+    serialized.push_back(static_cast<char>(uint8_t(topic_.size())));
+    serialized.append(topic_);
+    serialized.push_back(static_cast<char>(cmd_));
+    serialized.append(data_str_);
+    return serialized;
+}
+
 std::string ZMQMultiPtrMessage::encode_data_blocks(const std::vector<PyBytesPtr> &data_ptrs)
 {
-    int data_string_length = sizeof(int); // block_num
+    uint32_t data_string_length = sizeof(uint32_t); // block_num
     uint32_t block_num = data_ptrs.size();
     std::vector<uint32_t> data_lengths;
     for (const auto &data_ptr : data_ptrs)
     {
-        int data_length = sizeof(data_ptr);
+        int data_length = pybind11::len(*data_ptr);
         data_string_length += data_length + sizeof(uint32_t);
         data_lengths.push_back(data_length);
     }
@@ -158,19 +167,21 @@ std::string ZMQMultiPtrMessage::encode_data_blocks(const std::vector<PyBytesPtr>
         data_str.append(data_block_str);
     }
     assert(data_str.size() == data_string_length);
+    // printf("encode_data_blocks: %s\n", bytes_to_hex(data_str).c_str());
     return data_str;
 }
 
 std::vector<PyBytesPtr> ZMQMultiPtrMessage::decode_data_blocks(const std::string &data_str)
 {
     std::vector<PyBytesPtr> data_ptrs;
-    uint32_t block_num = bytes_to_uint32(data_str.substr(0, sizeof(uint32_t)));
-    printf("block_num: %d\n", block_num);
-    int data_start_index = 1 + block_num;
+    uint32_t block_num = bytes_to_uint32(std::string(data_str.data(), sizeof(uint32_t)));
+    int data_start_index = (1 + block_num) * sizeof(uint32_t);
+    // printf("decode_data_blocks: %s\n", bytes_to_hex(data_str).c_str());
     for (int i = 0; i < block_num; ++i)
     {
-        uint32_t data_length = bytes_to_uint32(data_str.substr(sizeof(uint32_t), (i + 1) * sizeof(uint32_t)));
-        printf("data_length: %d\n", data_length);
+        std::string data_length_str(data_str.data() + (i + 1) * sizeof(uint32_t), sizeof(uint32_t));
+
+        uint32_t data_length = bytes_to_uint32(data_length_str);
         if (data_start_index + data_length > data_str.size())
         {
             throw std::invalid_argument("Data block length invalid. Please check the data string");

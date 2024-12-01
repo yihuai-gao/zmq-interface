@@ -14,10 +14,10 @@ ZMQServer::ZMQServer(const std::string &server_endpoint)
 
 ZMQServer::~ZMQServer()
 {
-    socket_.close();
-    context_.close();
     running_ = false;
     background_thread_.join();
+    socket_.close();
+    context_.close();
 }
 
 void ZMQServer::add_topic(const std::string &topic, double max_remaining_time)
@@ -144,47 +144,31 @@ void ZMQServer::process_request_(const ZMQMessage &message)
         break;
     }
     case CmdType::GET_ALL_DATA: {
-        std::vector<PyBytesPtr> pointers = get_all_data_ptrs_(message.topic());
-
-        int num_data = pointers.size();
-        std::string data_str(reinterpret_cast<const char *>(&num_data), sizeof(int));
-        ZMQMessage reply(message.topic(), CmdType::GET_ALL_DATA, data_str);
+        ZMQMultiPtrMessage reply(message.topic(), CmdType::GET_ALL_DATA, get_all_data_ptrs_(message.topic()));
         std::string reply_data = reply.serialize();
         socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
-
-        for (const PyBytesPtr data_ptr : pointers)
-        {
-            ZMQMessage reply(message.topic(), CmdType::GET_ALL_DATA, data_ptr);
-            std::string reply_data = reply.serialize();
-            socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
-        }
         break;
     }
     case CmdType::GET_LAST_K_DATA: {
-        if (message.data_str().size() != sizeof(int))
+        if (message.data_str().size() != sizeof(uint32_t))
         {
             std::string error_message = "Invalid data size when requesting last k data: got " +
                                         std::to_string(message.data_str().size()) + " bytes, expected " +
-                                        std::to_string(sizeof(int)) + " bytes";
+                                        std::to_string(sizeof(uint32_t)) + " bytes";
             logger_->error(error_message);
-            ZMQMessage reply(message.topic(), CmdType::ERROR, error_message);
+            ZMQMultiPtrMessage reply(message.topic(), CmdType::ERROR, error_message);
             std::string reply_data = reply.serialize();
             socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
             break;
         }
         else
         {
-            std::vector<PyBytesPtr> pointers =
-                get_last_k_data_ptrs_(message.topic(), *reinterpret_cast<const int *>(message.data_str().data()));
-            int num_data = pointers.size();
-            std::string data_str(reinterpret_cast<const char *>(&num_data), sizeof(int));
-            ZMQMessage reply(message.topic(), CmdType::GET_LAST_K_DATA, data_str);
-            for (const PyBytesPtr data_ptr : pointers)
-            {
-                ZMQMessage reply(message.topic(), CmdType::GET_LAST_K_DATA, data_ptr);
-                std::string reply_data = reply.serialize();
-                socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
-            }
+            uint32_t k = bytes_to_uint32(message.data_str());
+            std::vector<PyBytesPtr> pointers = get_last_k_data_ptrs_(message.topic(), k);
+            ZMQMultiPtrMessage reply(message.topic(), CmdType::GET_LAST_K_DATA, pointers);
+            std::string reply_data = reply.serialize();
+            socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
+            break;
         }
         break;
     }
