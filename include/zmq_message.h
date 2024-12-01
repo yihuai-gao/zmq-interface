@@ -4,7 +4,7 @@
 #include <pybind11/pybind11.h>
 #include <vector>
 #include <zmq.hpp>
-enum class CmdType : int
+enum class CmdType : int8_t
 {
     GET_LATEST_DATA = 1,
     GET_ALL_DATA = 2,
@@ -55,3 +55,8 @@ class ZMQMultiPtrMessage
     std::vector<PyBytesPtr> data_ptrs_;
     std::string data_str_;
 };
+
+std::string int_to_bytes(int value);
+int bytes_to_int(const std::string &bytes);
+std::string uint32_to_bytes(uint32_t value);
+uint32_t bytes_to_uint32(const std::string &bytes);

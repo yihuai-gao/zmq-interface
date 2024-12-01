@@ -36,14 +36,14 @@ ZMQMessage::ZMQMessage(const std::string &serialized)
     {
         throw std::invalid_argument("Serialized message must be at least 3 bytes");
     }
-    short topic_length = serialized[0];
-    if (serialized.size() < 1 + topic_length + 1)
+    uint8_t topic_length = static_cast<uint8_t>(serialized[0]);
+    if (serialized.size() < sizeof(uint8_t) + topic_length + 1)
     {
         throw std::invalid_argument("Serialized message is too short");
     }
-    topic_ = std::string(serialized.begin() + 1, serialized.begin() + 1 + topic_length);
-    cmd_ = static_cast<CmdType>(serialized[1 + topic_length]);
-    data_str_ = std::string(serialized.begin() + 2 + topic_length, serialized.end());
+    topic_ = std::string(serialized.begin() + sizeof(uint8_t), serialized.begin() + sizeof(uint8_t) + topic_length);
+    cmd_ = static_cast<CmdType>(serialized[sizeof(uint8_t) + topic_length]);
+    data_str_ = std::string(serialized.begin() + 2 * sizeof(uint8_t) + topic_length, serialized.end());
 }
 
 std::string ZMQMessage::topic() const
@@ -69,9 +69,9 @@ std::string ZMQMessage::data_str() const
 std::string ZMQMessage::serialize() const
 {
     std::string serialized;
-    serialized.push_back(topic_.size());
+    serialized.append(reinterpret_cast<const char *>(topic_.size(), sizeof(uint8_t)));
     serialized.insert(serialized.end(), topic_.begin(), topic_.end());
-    serialized.push_back(static_cast<char>(cmd_));
+    serialized.append(reinterpret_cast<const char *>(cmd_, sizeof(int8_t)));
     serialized.insert(serialized.end(), data_str_.begin(), data_str_.end());
     return serialized;
 }
@@ -91,14 +91,15 @@ ZMQMultiPtrMessage::ZMQMultiPtrMessage(const std::string &topic, CmdType cmd, co
 
 ZMQMultiPtrMessage::ZMQMultiPtrMessage(const std::string &serialized)
 {
-    short topic_length = serialized[0];
-    if (serialized.size() < 1 + topic_length + 1)
+    uint8_t topic_length = static_cast<uint8_t>(serialized[0]);
+    if (serialized.size() < sizeof(uint8_t) + topic_length + sizeof(uint8_t))
     {
         throw std::invalid_argument("Serialized message is too short");
     }
-    topic_ = std::string(serialized.begin() + 1, serialized.begin() + 1 + topic_length);
-    cmd_ = static_cast<CmdType>(serialized[1 + topic_length]);
-    data_str_ = std::string(serialized.begin() + 2 + topic_length, serialized.end());
+    topic_ = std::string(serialized.begin() + sizeof(uint8_t), serialized.begin() + sizeof(uint8_t) + topic_length);
+    printf("Sizeof CmdType: %d \n", sizeof(CmdType));
+    cmd_ = static_cast<CmdType>(serialized[sizeof(int8_t) + topic_length]);
+    data_str_ = std::string(serialized.begin() + 2 * sizeof(uint8_t) + topic_length, serialized.end());
     data_ptrs_ = decode_data_blocks(data_str_);
 }
 
@@ -125,23 +126,28 @@ std::vector<PyBytesPtr> ZMQMultiPtrMessage::data_ptrs()
     return data_ptrs_;
 }
 
+std::string ZMQMultiPtrMessage::data_str() const
+{
+    return data_str_;
+}
+
 std::string ZMQMultiPtrMessage::encode_data_blocks(const std::vector<PyBytesPtr> &data_ptrs)
 {
     int data_string_length = sizeof(int); // block_num
-    int block_num = data_ptrs.size();
-    std::vector<int> data_lengths;
+    uint32_t block_num = data_ptrs.size();
+    std::vector<uint32_t> data_lengths;
     for (const auto &data_ptr : data_ptrs)
     {
         int data_length = sizeof(data_ptr);
-        data_string_length += data_length + sizeof(int);
+        data_string_length += data_length + sizeof(uint32_t);
         data_lengths.push_back(data_length);
     }
     std::string data_str;
     data_str.reserve(data_string_length);
-    data_str.push_back(block_num);
+    data_str.append(uint32_to_bytes(block_num));
     for (int i = 0; i < block_num; ++i)
     {
-        data_str.push_back(data_lengths[i]);
+        data_str.append(uint32_to_bytes(data_lengths[i]));
     }
     int data_start_index = 1 + block_num;
     for (const auto &data_ptr : data_ptrs)
@@ -156,13 +162,27 @@ std::string ZMQMultiPtrMessage::encode_data_blocks(const std::vector<PyBytesPtr>
 std::vector<PyBytesPtr> ZMQMultiPtrMessage::decode_data_blocks(const std::string &data_str)
 {
     std::vector<PyBytesPtr> data_ptrs;
-    int block_num = data_str[0];
+    uint32_t block_num = bytes_to_uint32(data_str.substr(0, sizeof(uint32_t)));
+    printf("block_num: %d\n", block_num);
     int data_start_index = 1 + block_num;
     for (int i = 0; i < block_num; ++i)
     {
-        int data_length = data_str[i + 1];
-        data_ptrs.push_back(
-            std::make_shared<pybind11::bytes>(data_str.substr(data_start_index, data_start_index + data_length)));
+        uint32_t data_length = bytes_to_uint32(data_str.substr(sizeof(uint32_t), (i + 1) * sizeof(uint32_t)));
+        printf("data_length: %d\n", data_length);
+        if (data_start_index + data_length > data_str.size())
+        {
+            throw std::invalid_argument("Data block length invalid. Please check the data string");
+        }
+        if (data_length < 0)
+        {
+            throw std::invalid_argument("Data block length must be non-negative");
+        }
+        if (data_length == 0)
+        {
+            data_ptrs.push_back(std::make_shared<PyBytes>(PyBytes("")));
+            continue;
+        }
+        data_ptrs.push_back(std::make_shared<PyBytes>(PyBytes(data_str.data() + data_start_index, data_length)));
         data_start_index += data_length;
     }
     return data_ptrs;
@@ -191,4 +211,32 @@ void ZMQMultiPtrMessage::check_input_validity_()
             throw std::invalid_argument("Data cannot be null");
         }
     }
+}
+
+std::string int_to_bytes(int value)
+{
+    return std::string(reinterpret_cast<const char *>(&value), sizeof(int));
+}
+
+int bytes_to_int(const std::string &bytes)
+{
+    if (bytes.size() != sizeof(int))
+    {
+        throw std::invalid_argument("Input bytes must have the same size as an integer");
+    }
+    return *reinterpret_cast<const int *>(bytes.data());
+}
+
+std::string uint32_to_bytes(uint32_t value)
+{
+    return std::string(reinterpret_cast<const char *>(&value), sizeof(uint32_t));
+}
+
+uint32_t bytes_to_uint32(const std::string &bytes)
+{
+    if (bytes.size() != sizeof(uint32_t))
+    {
+        throw std::invalid_argument("Input bytes must have the same size as an unsigned integer");
+    }
+    return *reinterpret_cast<const uint32_t *>(bytes.data());
 }
