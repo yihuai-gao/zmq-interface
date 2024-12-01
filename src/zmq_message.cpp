@@ -1,6 +1,6 @@
 #include "zmq_message.h"
 
-ZMQMessage::ZMQMessage(const std::string &topic, CmdType cmd, const PythonBytesPtr data_ptr) : topic_(topic), cmd_(cmd)
+ZMQMessage::ZMQMessage(const std::string &topic, CmdType cmd, const PyBytesPtr data_ptr) : topic_(topic), cmd_(cmd)
 {
     if (topic_.size() > 255)
     {
@@ -56,7 +56,7 @@ CmdType ZMQMessage::cmd() const
     return cmd_;
 }
 
-PythonBytesPtr ZMQMessage::data_ptr() const
+PyBytesPtr ZMQMessage::data_ptr() const
 {
     return std::make_shared<pybind11::bytes>(data_);
 }

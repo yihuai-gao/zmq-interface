@@ -9,7 +9,7 @@
 
 namespace py = pybind11;
 
-PythonBytesPtr bytes_to_shared_string(py::bytes py_bytes)
+PyBytesPtr bytes_to_shared_string(py::bytes py_bytes)
 {
     return std::make_shared<py::bytes>(py_bytes);
 }
@@ -32,32 +32,27 @@ PYBIND11_MODULE(zmq_interface, m)
     //     .def("get_last_k_data", &DataTopic::get_last_k_data);
 
     // py::class_<ZMQMessage>(m, "ZMQMessage")
-    //     .def(py::init<const std::string &, CmdType, const PythonBytesPtr>())
+    //     .def(py::init<const std::string &, CmdType, const PyBytesPtr>())
     //     .def(py::init<const std::string &>())
     //     .def("topic", &ZMQMessage::topic)
     //     .def("cmd", &ZMQMessage::cmd)
     //     .def("data", &ZMQMessage::data_ptr)
     //     .def("serialize", &ZMQMessage::serialize);
 
-    // py::class_<ZMQClient>(m, "ZMQClient")
-    //     .def(py::init<const std::string &>())
-    //     .def("request_latest", &ZMQClient::request_latest);
-    // .def("request_last_k", &ZMQClient::request_last_k)
-    // .def("request_with_data", &ZMQClient::request_with_data);
+    py::class_<ZMQClient>(m, "ZMQClient")
+        .def(py::init<const std::string &>())
+        .def("request_latest", &ZMQClient::request_latest)
+        .def("request_all", &ZMQClient::request_all)
+        .def("request_last_k", &ZMQClient::request_last_k)
+        .def("request_with_data", &ZMQClient::request_with_data);
 
     py::class_<ZMQServer>(m, "ZMQServer")
         .def(py::init<const std::string &>())
         .def("add_topic", &ZMQServer::add_topic)
-        .def(
-            "put_data",
-            [](ZMQServer &self, std::string topic, py::bytes data) {
-                // Use the helper function for `py::bytes` input
-                return self.put_data(topic, bytes_to_shared_string(data));
-            },
-            py::arg("topic"), py::arg("data"))
-        .def("get_latest_data", [](ZMQServer &self, std::string topic) { return *self.get_latest_data_ptr(topic); });
-    // .def("get_all_data", &ZMQServer::get_all_data)
-    // .def("get_last_k_data", &ZMQServer::get_last_k_data)
-    // .def("get_all_topic_names", &ZMQServer::get_all_topic_names)
+        .def("put_data", &ZMQServer::put_data)
+        .def("get_latest_data", &ZMQServer::get_latest_data)
+        .def("get_all_data", &ZMQServer::get_all_data)
+        .def("get_last_k_data", &ZMQServer::get_last_k_data)
+        .def("get_all_topic_names", &ZMQServer::get_all_topic_names);
     // .def("set_request_with_data_handler", &ZMQServer::set_request_with_data_handler);
 }

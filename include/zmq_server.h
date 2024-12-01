@@ -19,12 +19,12 @@ class ZMQServer
     ZMQServer(const std::string &server_endpoint);
     ~ZMQServer();
     void add_topic(const std::string &topic, double max_remaining_time);
-    void put_data(const std::string &topic, const PythonBytesPtr data_ptr);
-    PythonBytesPtr get_latest_data_ptr(const std::string &topic);
-    std::vector<PythonBytesPtr> get_all_data(const std::string &topic);
-    std::vector<PythonBytesPtr> get_last_k_data(const std::string &topic, int k);
+    void put_data(const std::string &topic, const PyBytes &data);
+    PyBytes get_latest_data(const std::string &topic);
+    std::vector<PyBytes> get_all_data(const std::string &topic);
+    std::vector<PyBytes> get_last_k_data(const std::string &topic, int k);
 
-    void set_request_with_data_handler(std::function<PythonBytesPtr(const PythonBytesPtr)> handler);
+    // void set_request_with_data_handler(std::function<PyBytes(const PyBytes)> handler);
     std::vector<std::string> get_all_topic_names();
 
   private:
@@ -41,8 +41,11 @@ class ZMQServer
 
     void process_request_(const ZMQMessage &message);
 
-    std::function<PythonBytesPtr(const PythonBytesPtr)> request_with_data_handler_;
+    PyBytesPtr get_latest_data_ptr_(const std::string &topic);
+    std::vector<PyBytesPtr> get_all_data_ptrs_(const std::string &topic);
+    std::vector<PyBytesPtr> get_last_k_data_ptrs_(const std::string &topic, int k);
 
-    // PythonBytesPtr serialize_multiple_data_(const std::vector<PythonBytesPtr> &data);
+    std::function<PyBytesPtr(const PyBytesPtr)> request_with_data_handler_;
+
     void background_loop_();
 };

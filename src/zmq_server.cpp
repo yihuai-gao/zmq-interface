@@ -33,7 +33,7 @@ void ZMQServer::add_topic(const std::string &topic, double max_remaining_time)
     logger_->info("Added topic {} with max remaining time {}.", topic, max_remaining_time);
 }
 
-void ZMQServer::put_data(const std::string &topic, const PythonBytesPtr data_ptr)
+void ZMQServer::put_data(const std::string &topic, const PyBytes &data)
 {
     std::lock_guard<std::mutex> lock(data_mutex_);
     auto it = data_topics_.find(topic);
@@ -44,10 +44,38 @@ void ZMQServer::put_data(const std::string &topic, const PythonBytesPtr data_ptr
             topic);
         return;
     }
+    PyBytesPtr data_ptr = std::make_shared<PyBytes>(data);
     it->second.add_data_ptr(data_ptr, get_time_us() - start_time_);
 }
 
-PythonBytesPtr ZMQServer::get_latest_data_ptr(const std::string &topic)
+PyBytes ZMQServer::get_latest_data(const std::string &topic)
+{
+    return *(get_latest_data_ptr_(topic));
+}
+
+std::vector<PyBytes> ZMQServer::get_all_data(const std::string &topic)
+{
+    std::vector<PyBytesPtr> ptrs = get_all_data_ptrs_(topic);
+    std::vector<PyBytes> result;
+    for (const PyBytesPtr ptr : ptrs)
+    {
+        result.push_back(*ptr);
+    }
+    return result;
+}
+
+std::vector<PyBytes> ZMQServer::get_last_k_data(const std::string &topic, int k)
+{
+    std::vector<PyBytesPtr> ptrs = get_last_k_data_ptrs_(topic, k);
+    std::vector<PyBytes> result;
+    for (const PyBytesPtr ptr : ptrs)
+    {
+        result.push_back(*ptr);
+    }
+    return result;
+}
+
+PyBytesPtr ZMQServer::get_latest_data_ptr_(const std::string &topic)
 {
     std::lock_guard<std::mutex> lock(data_mutex_);
     auto it = data_topics_.find(topic);
@@ -61,7 +89,7 @@ PythonBytesPtr ZMQServer::get_latest_data_ptr(const std::string &topic)
     return it->second.get_latest_data_ptr();
 }
 
-std::vector<PythonBytesPtr> ZMQServer::get_all_data(const std::string &topic)
+std::vector<PyBytesPtr> ZMQServer::get_all_data_ptrs_(const std::string &topic)
 {
     std::lock_guard<std::mutex> lock(data_mutex_);
     auto it = data_topics_.find(topic);
@@ -70,12 +98,12 @@ std::vector<PythonBytesPtr> ZMQServer::get_all_data(const std::string &topic)
         logger_->warn("Requested all data for unknown topic {}. Please first call add_topic to add it into the "
                       "recorded topics.",
                       topic);
-        return std::vector<PythonBytesPtr>();
+        return std::vector<PyBytesPtr>();
     }
     return it->second.get_all_data();
 }
 
-std::vector<PythonBytesPtr> ZMQServer::get_last_k_data(const std::string &topic, int k)
+std::vector<PyBytesPtr> ZMQServer::get_last_k_data_ptrs_(const std::string &topic, int k)
 {
     std::lock_guard<std::mutex> lock(data_mutex_);
     auto it = data_topics_.find(topic);
@@ -89,11 +117,11 @@ std::vector<PythonBytesPtr> ZMQServer::get_last_k_data(const std::string &topic,
     return it->second.get_last_k_data(k);
 }
 
-void ZMQServer::set_request_with_data_handler(std::function<PythonBytesPtr(const PythonBytesPtr)> handler)
-{
-    request_with_data_handler_initialized_ = true;
-    request_with_data_handler_ = handler;
-}
+// void ZMQServer::set_request_with_data_handler(std::function<PyBytesPtr(const PyBytesPtr)> handler)
+// {
+//     request_with_data_handler_initialized_ = true;
+//     request_with_data_handler_ = handler;
+// }
 
 std::vector<std::string> ZMQServer::get_all_topic_names()
 {
@@ -109,13 +137,21 @@ void ZMQServer::process_request_(const ZMQMessage &message)
     switch (message.cmd())
     {
     case CmdType::GET_LATEST_DATA: {
-        ZMQMessage reply(message.topic(), CmdType::GET_LATEST_DATA, get_latest_data_ptr(message.topic()));
+        ZMQMessage reply(message.topic(), CmdType::GET_LATEST_DATA, get_latest_data_ptr_(message.topic()));
         std::string reply_data = reply.serialize();
         socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
         break;
     }
     case CmdType::GET_ALL_DATA: {
-        for (const PythonBytesPtr data_ptr : get_all_data(message.topic()))
+        std::vector<PyBytesPtr> pointers = get_all_data_ptrs_(message.topic());
+
+        int num_data = pointers.size();
+        std::string data_str(reinterpret_cast<const char *>(&num_data), sizeof(int));
+        ZMQMessage reply(message.topic(), CmdType::GET_ALL_DATA, data_str);
+        std::string reply_data = reply.serialize();
+        socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
+
+        for (const PyBytesPtr data_ptr : pointers)
         {
             ZMQMessage reply(message.topic(), CmdType::GET_ALL_DATA, data_ptr);
             std::string reply_data = reply.serialize();
@@ -137,9 +173,12 @@ void ZMQServer::process_request_(const ZMQMessage &message)
         }
         else
         {
-            std::vector<PythonBytesPtr> pointers =
-                get_last_k_data(message.topic(), *reinterpret_cast<const int *>(message.data_str().data()));
-            for (const PythonBytesPtr data_ptr : pointers)
+            std::vector<PyBytesPtr> pointers =
+                get_last_k_data_ptrs_(message.topic(), *reinterpret_cast<const int *>(message.data_str().data()));
+            int num_data = pointers.size();
+            std::string data_str(reinterpret_cast<const char *>(&num_data), sizeof(int));
+            ZMQMessage reply(message.topic(), CmdType::GET_LAST_K_DATA, data_str);
+            for (const PyBytesPtr data_ptr : pointers)
             {
                 ZMQMessage reply(message.topic(), CmdType::GET_LAST_K_DATA, data_ptr);
                 std::string reply_data = reply.serialize();

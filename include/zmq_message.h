@@ -18,12 +18,12 @@ enum class CmdType : int
 class ZMQMessage
 {
   public:
-    ZMQMessage(const std::string &topic, CmdType cmd, const PythonBytesPtr data_ptr);
+    ZMQMessage(const std::string &topic, CmdType cmd, const PyBytesPtr data_ptr);
     ZMQMessage(const std::string &topic, CmdType cmd, const std::string &data_str);
     ZMQMessage(const std::string &serialized);
     std::string topic() const;
     CmdType cmd() const;
-    PythonBytesPtr data_ptr() const;
+    PyBytesPtr data_ptr() const;
     std::string data_str() const; // Should avoid using it if data has a large size
     std::string serialize() const;
 

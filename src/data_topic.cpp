@@ -7,27 +7,27 @@ DataTopic::DataTopic(const std::string &topic_name, double max_remaining_time)
     timestamps_.clear();
 }
 
-void DataTopic::add_data_ptr(const PythonBytesPtr data_ptr, double timestamp)
+void DataTopic::add_data_ptr(const PyBytesPtr data_ptr, double timestamp)
 {
     data_.push_back(data_ptr);
     timestamps_.push_back(timestamp);
 }
 
-std::vector<PythonBytesPtr> DataTopic::get_all_data()
+std::vector<PyBytesPtr> DataTopic::get_all_data()
 {
-    return std::vector<PythonBytesPtr>(data_.begin(), data_.end());
+    return std::vector<PyBytesPtr>(data_.begin(), data_.end());
 }
 
-std::vector<PythonBytesPtr> DataTopic::get_last_k_data(int k)
+std::vector<PyBytesPtr> DataTopic::get_last_k_data(int k)
 {
     if (data_.size() < k)
     {
         k = data_.size();
     }
-    return std::vector<PythonBytesPtr>(data_.end() - k, data_.end());
+    return std::vector<PyBytesPtr>(data_.end() - k, data_.end());
 }
 
-PythonBytesPtr DataTopic::get_latest_data_ptr()
+PyBytesPtr DataTopic::get_latest_data_ptr()
 {
     if (data_.empty())
     {
