@@ -33,6 +33,8 @@ class ZMQServer
     double start_time_;
     zmq::context_t context_;
     zmq::socket_t socket_;
+    zmq::pollitem_t poller_item_;
+    const std::chrono::milliseconds poller_timeout_ms_;
     std::thread background_thread_;
     std::mutex data_mutex_;
 

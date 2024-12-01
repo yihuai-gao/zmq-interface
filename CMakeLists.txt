@@ -19,7 +19,6 @@ find_path(CPPZMQ_INCLUDE_DIR zmq.hpp)
 # Set output directories
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-
 # Add source files (adjust the path according to your source structure)
 set(SOURCES
     src/zmq_client.cpp

@@ -4,10 +4,11 @@
 
 ZMQServer::ZMQServer(const std::string &server_endpoint)
     : context_(1), socket_(context_, zmq::socket_type::rep), logger_(spdlog::stdout_color_mt("ZMQServer")),
-      running_(false), start_time_(get_time_us())
+      running_(false), start_time_(get_time_us()), poller_timeout_ms_(1000)
 {
     socket_.bind(server_endpoint);
     running_ = true;
+    poller_item_ = {socket_, 0, ZMQ_POLLIN, 0};
     background_thread_ = std::thread(&ZMQServer::background_loop_, this);
     data_topics_ = std::unordered_map<std::string, DataTopic>();
 }
@@ -208,9 +209,15 @@ void ZMQServer::background_loop_()
 {
     while (running_)
     {
+
+        zmq::poll(&poller_item_, 1, poller_timeout_ms_.count());
+
         zmq::message_t request;
-        socket_.recv(request);
-        ZMQMessage message(std::string(request.data<char>(), request.data<char>() + request.size()));
-        process_request_(message);
+        if (poller_item_.revents & ZMQ_POLLIN)
+        {
+            socket_.recv(request);
+            ZMQMessage message(std::string(request.data<char>(), request.data<char>() + request.size()));
+            process_request_(message);
+        }
     }
 }
