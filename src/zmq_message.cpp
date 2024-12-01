@@ -1,5 +1,6 @@
 #include "zmq_message.h"
-
+#include <iomanip>
+#include <sstream>
 ZMQMessage::ZMQMessage(const std::string &topic, CmdType cmd, const PyBytesPtr data_ptr) : topic_(topic), cmd_(cmd)
 {
     if (topic_.size() > 255)
@@ -69,10 +70,11 @@ std::string ZMQMessage::data_str() const
 std::string ZMQMessage::serialize() const
 {
     std::string serialized;
-    serialized.append(reinterpret_cast<const char *>(topic_.size(), sizeof(uint8_t)));
-    serialized.insert(serialized.end(), topic_.begin(), topic_.end());
-    serialized.append(reinterpret_cast<const char *>(cmd_, sizeof(int8_t)));
-    serialized.insert(serialized.end(), data_str_.begin(), data_str_.end());
+    serialized.push_back(static_cast<char>(uint8_t(topic_.size())));
+    serialized.append(topic_);
+    serialized.push_back(static_cast<char>(cmd_));
+    serialized.append(data_str_);
+    // printf("serailized: %s\n", bytes_to_hex(serialized).c_str());
     return serialized;
 }
 
@@ -239,4 +241,15 @@ uint32_t bytes_to_uint32(const std::string &bytes)
         throw std::invalid_argument("Input bytes must have the same size as an unsigned integer");
     }
     return *reinterpret_cast<const uint32_t *>(bytes.data());
+}
+
+std::string bytes_to_hex(const std::string &bytes)
+{
+    std::ostringstream hex_stream;
+    hex_stream << std::hex << std::setfill('0');
+    for (unsigned char byte : bytes)
+    {
+        hex_stream << std::setw(2) << static_cast<int>(byte);
+    }
+    return hex_stream.str();
 }

@@ -60,3 +60,5 @@ std::string int_to_bytes(int value);
 int bytes_to_int(const std::string &bytes);
 std::string uint32_to_bytes(uint32_t value);
 uint32_t bytes_to_uint32(const std::string &bytes);
+
+std::string bytes_to_hex(const std::string &bytes);

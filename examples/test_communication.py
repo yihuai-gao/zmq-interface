@@ -18,7 +18,6 @@ def test_communication():
         server.put_data("test", pickle_data)
         send_end_time = time.time()
         time.sleep(0.01)
-        # time.sleep(0.1)
         retrieve_start_time = time.time()
         retrieved_data = client.request_latest("test")
         retrieve_end_time = time.time()
