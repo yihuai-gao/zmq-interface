@@ -14,15 +14,16 @@ ZMQClient::~ZMQClient()
 PyBytes ZMQClient::request_latest(const std::string &topic)
 {
     ZMQMessage message(topic, CmdType::GET_LATEST_DATA, std::string());
-    return *send_message_(message)[0];
+    last_retrieved_ptrs_ = send_message_(message);
+    return *last_retrieved_ptrs_[0];
 }
 
 std::vector<PyBytes> ZMQClient::request_all(const std::string &topic)
 {
     ZMQMessage message(topic, CmdType::GET_ALL_DATA, std::string());
-    std::vector<PyBytesPtr> replied_pointers = send_message_(message);
+    last_retrieved_ptrs_ = send_message_(message);
     std::vector<PyBytes> reply;
-    for (const PyBytesPtr ptr : replied_pointers)
+    for (const PyBytesPtr ptr : last_retrieved_ptrs_)
     {
         reply.push_back(*ptr);
     }
@@ -33,9 +34,9 @@ std::vector<PyBytes> ZMQClient::request_last_k(const std::string &topic, int k)
 {
     std::string data_str(reinterpret_cast<const char *>(&k), sizeof(int));
     ZMQMessage message(topic, CmdType::GET_LAST_K_DATA, data_str);
-    std::vector<PyBytesPtr> replied_pointers = send_message_(message);
+    last_retrieved_ptrs_ = send_message_(message);
     std::vector<PyBytes> reply;
-    for (const PyBytesPtr ptr : replied_pointers)
+    for (const PyBytesPtr ptr : last_retrieved_ptrs_)
     {
         reply.push_back(*ptr);
     }
@@ -47,6 +48,20 @@ PyBytes ZMQClient::request_with_data(const std::string &topic, const PyBytes dat
     PyBytesPtr data_ptr = std::make_shared<pybind11::bytes>(data);
     ZMQMessage message(topic, CmdType::REQUEST_WITH_DATA, data_ptr);
     return *send_message_(message)[0];
+}
+
+std::vector<PyBytes> ZMQClient::get_last_retrieved_data()
+{
+    if (last_retrieved_ptrs_.empty())
+    {
+        return {};
+    }
+    std::vector<PyBytes> data;
+    for (const PyBytesPtr ptr : last_retrieved_ptrs_)
+    {
+        data.push_back(*ptr);
+    }
+    return data;
 }
 
 std::vector<PyBytesPtr> ZMQClient::send_message_(const ZMQMessage &message)
