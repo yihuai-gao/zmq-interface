@@ -56,7 +56,7 @@ setup(
     version="0.1.0",
     author="Yihuai Gao",
     author_email="yihuai@stanford.edu",
-    description="A C++ based multi-threaded ZMQ interface for Python applications",
+    description="A C++ based multi-threaded ZMQ interface for Python bytes",
     long_description="",
     ext_modules=[CMakeExtension("zmq_interface")],
     cmdclass={"build_ext": CMakeBuild},

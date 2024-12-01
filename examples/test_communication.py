@@ -8,12 +8,12 @@ def test_communication():
     server = zi.ZMQServer("ipc:///tmp/feeds/0")
     client = zi.ZMQClient("ipc:///tmp/feeds/0")
 
-    server.add_topic("test", 10000)
+    server.add_topic("test", 10)
 
-    rand_data = np.random.rand(1000000)
-    print(f"Data size: {rand_data.nbytes / 1024**2:.3f}MB")
+
 
     for k in range(10):
+        rand_data = np.random.rand(1000000)
         start_time = time.time()
         pickle_data = pickle.dumps(rand_data)
         dump_end_time = time.time()
@@ -25,11 +25,9 @@ def test_communication():
         retrieve_end_time = time.time()
         received_data = pickle.loads(retrieved_data)
         print(
-            f"Time elapsed: dump: {dump_end_time - start_time:.4f}, send: {send_end_time - dump_end_time: .4f}, retrieve: {retrieve_end_time - retrieve_start_time:.4f}, load: {time.time() - retrieve_end_time:.4f}"
+            f"Data size: {rand_data.nbytes / 1024**2:.3f}MB. dump: {dump_end_time - start_time:.4f}s, send: {send_end_time - dump_end_time: .4f}s, retrieve: {retrieve_end_time - retrieve_start_time:.4f}s, load: {time.time() - retrieve_end_time:.4f}s, correctness: {np.allclose(received_data, rand_data)}"
         )
-        print(np.allclose(received_data, rand_data))
-        # assert np.allclose(retrieved_data, received_data)
-        # time.sleep(0.1)
+
 
     print("Start requesting")
     print([pickle.loads(data) for data in client.request_all("test")])

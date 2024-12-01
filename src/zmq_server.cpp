@@ -2,11 +2,11 @@
 #include "zmq_server.h"
 #include <spdlog/sinks/stdout_color_sinks.h>
 
-ZMQServer::ZMQServer(const std::string &endpoint)
+ZMQServer::ZMQServer(const std::string &server_endpoint)
     : context_(1), socket_(context_, zmq::socket_type::rep), logger_(spdlog::stdout_color_mt("ZMQServer")),
       running_(false), start_time_(get_time_us())
 {
-    socket_.bind(endpoint);
+    socket_.bind(server_endpoint);
     running_ = true;
     background_thread_ = std::thread(&ZMQServer::background_loop_, this);
     data_topics_ = std::unordered_map<std::string, DataTopic>();
@@ -75,6 +75,16 @@ std::vector<PyBytes> ZMQServer::get_last_k_data(const std::string &topic, int k)
     return result;
 }
 
+std::vector<std::string> ZMQServer::get_all_topic_names()
+{
+    std::vector<std::string> result;
+    for (const auto &pair : data_topics_)
+    {
+        result.push_back(pair.first);
+    }
+    return result;
+}
+
 PyBytesPtr ZMQServer::get_latest_data_ptr_(const std::string &topic)
 {
     std::lock_guard<std::mutex> lock(data_mutex_);
@@ -123,15 +133,6 @@ std::vector<PyBytesPtr> ZMQServer::get_last_k_data_ptrs_(const std::string &topi
 //     request_with_data_handler_ = handler;
 // }
 
-std::vector<std::string> ZMQServer::get_all_topic_names()
-{
-    std::vector<std::string> result;
-    for (const auto &pair : data_topics_)
-    {
-        result.push_back(pair.first);
-    }
-    return result;
-}
 void ZMQServer::process_request_(const ZMQMessage &message)
 {
     switch (message.cmd())

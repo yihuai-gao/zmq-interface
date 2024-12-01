@@ -22,7 +22,9 @@ class ZMQClient
 
   private:
     std::vector<PyBytesPtr> deserialize_multiple_data_(const std::string &data);
-    std::vector<PyBytesPtr> send_message_(const ZMQMessage &message);
+    PyBytesPtr send_single_block_request_(const ZMQMessage &message);
+    std::vector<PyBytesPtr> send_multi_block_request_(const ZMQMessage &message);
+
     zmq::context_t context_;
     zmq::socket_t socket_;
     std::vector<PyBytesPtr> last_retrieved_ptrs_;
