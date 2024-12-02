@@ -20,9 +20,8 @@ class ZMQServer
     ~ZMQServer();
     void add_topic(const std::string &topic, double max_remaining_time);
     void put_data(const std::string &topic, const PyBytes &data);
-    pybind11::list get_latest_data(const std::string &topic);
-    pybind11::tuple get_all_data(const std::string &topic);
-    pybind11::tuple get_last_k_data(const std::string &topic, int k);
+    pybind11::tuple peek_data(const std::string &topic, std::string end_type_str, int32_t n);
+    pybind11::tuple pop_data(const std::string &topic, std::string end_type_str, int32_t n);
     double get_timestamp();
     void reset_start_time(int64_t system_time_us);
 
@@ -39,16 +38,15 @@ class ZMQServer
     zmq::pollitem_t poller_item_;
     const std::chrono::milliseconds poller_timeout_ms_;
     std::thread background_thread_;
-    std::mutex data_mutex_;
+    std::mutex data_topic_mutex_;
 
     std::unordered_map<std::string, DataTopic> data_topics_;
     std::shared_ptr<spdlog::logger> logger_;
 
-    void process_request_(const ZMQMessage &message);
+    void process_request_(ZMQMessage &message);
 
-    TimedPtr get_latest_data_ptr_(const std::string &topic);
-    std::vector<TimedPtr> get_all_data_ptrs_(const std::string &topic);
-    std::vector<TimedPtr> get_last_k_data_ptrs_(const std::string &topic, int k);
+    std::vector<TimedPtr> peek_data_ptrs_(const std::string &topic, EndType end_type, int k);
+    std::vector<TimedPtr> pop_data_ptrs_(const std::string &topic, EndType end_type, int k);
 
     std::function<TimedPtr(const TimedPtr)> request_with_data_handler_;
 

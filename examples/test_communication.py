@@ -22,15 +22,15 @@ def test_communication():
         send_end_time = time.time()
         time.sleep(0.01)
         retrieve_start_time = time.time()
-        retrieved_data, timestamp = client.request_latest("test")
+        retrieved_data, timestamp = client.peek_data("test", "latest", 1)
         retrieve_end_time = time.time()
-        received_data = pickle.loads(retrieved_data)
+        received_data = pickle.loads(retrieved_data[0])
         print(
             f"Data size: {rand_data.nbytes / 1024**2:.3f}MB. dump: {dump_end_time - start_time:.4f}s, send: {send_end_time - dump_end_time: .4f}s, retrieve: {retrieve_end_time - retrieve_start_time:.4f}s, load: {time.time() - retrieve_end_time:.4f}s, correctness: {np.allclose(received_data, rand_data)}"
         )
 
     start_time = time.time()
-    all_pickle_data, all_timestamps = client.request_all("test")
+    all_pickle_data, all_timestamps = client.peek_data("test", "latest", -1)
     request_end_time = time.time()
     all_data = [pickle.loads(data) for data in all_pickle_data]
     loads_end_time = time.time()
@@ -40,7 +40,7 @@ def test_communication():
     )
 
     start_time = time.time()
-    last_k_pickle_data, last_k_timestamps = client.request_last_k("test", 5)
+    last_k_pickle_data, last_k_timestamps = client.peek_data("test", "latest", 5)
     request_end_time = time.time()
     last_k_data = [pickle.loads(data) for data in last_k_pickle_data]
     loads_end_time = time.time()

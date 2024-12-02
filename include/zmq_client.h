@@ -15,10 +15,8 @@ class ZMQClient
     ZMQClient(const std::string &client_name, const std::string &server_endpoint);
     ~ZMQClient();
 
-    pybind11::list request_latest(const std::string &topic);
-    pybind11::tuple request_all(const std::string &topic);
-    pybind11::tuple request_last_k(const std::string &topic, uint32_t k);
-    pybind11::tuple request_with_data(const std::string &topic, const PyBytes data_ptr);
+    pybind11::tuple peek_data(const std::string &topic, std::string end_type, int32_t n);
+    pybind11::tuple pop_data(const std::string &topic, std::string end_type, int32_t n);
     pybind11::tuple get_last_retrieved_data();
 
     double get_timestamp();
@@ -26,8 +24,8 @@ class ZMQClient
 
   private:
     std::vector<TimedPtr> deserialize_multiple_data_(const std::string &data);
-    TimedPtr send_single_block_request_(const ZMQMessage &message);
-    std::vector<TimedPtr> send_multi_block_request_(const ZMQMessage &message);
+    // TimedPtr send_single_block_request_(const ZMQMessage &message);
+    std::vector<TimedPtr> send_request_(ZMQMessage &message);
 
     std::string client_name_;
     std::shared_ptr<spdlog::logger> logger_;

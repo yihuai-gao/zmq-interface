@@ -2,6 +2,7 @@ import zmq_interface as zi
 import time
 import pickle
 import numpy as np
+import numpy.typing as npt
 import psutil
 
 
@@ -31,16 +32,23 @@ def test_timestamps():
         server.put_data(topic_name, data_bytes)
         # Because of the shared_ptr, the data is stored in the server even if it is dereferenced in python
         del data_bytes
-        data, timestamp = server.get_all_data(
-            topic_name
+        data, timestamp = server.peek_data(
+            topic_name, "latest", -1
         )  # only pass the reference so will take zero time
         print(
             f"Iter: {i}, data size: {rand_data.nbytes / 1024**2:.3f}MB, stored data size: {len(data)}, memory usage: {get_memory_usage():.3f}MB"
         )
         time.sleep(0.01)
-        # data, timestamp = server.get_latest_data(topic_name)
-        # restored_data = pickle.loads(data)
-        # print(np.allclose(rand_data, restored_data))
+
+    for i in range(1000):
+        raw_data, timestamp = server.pop_data(topic_name, "latest", 1)
+        if len(raw_data) == 0:
+            print("No data left")
+            break
+        restored_data: npt.NDArray[np.float64] = pickle.loads(raw_data[0])
+        print(
+            f"Iter: {i}, data size: {restored_data.nbytes / 1024**2:.3f}MB, memory usage: {get_memory_usage():.3f}MB"
+        )
 
 
 if __name__ == "__main__":

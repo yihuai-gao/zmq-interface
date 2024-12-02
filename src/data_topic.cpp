@@ -15,30 +15,46 @@ void DataTopic::add_data_ptr(const PyBytesPtr data_ptr, double timestamp)
     }
 }
 
-std::vector<TimedPtr> DataTopic::get_all_data_ptrs()
+std::vector<TimedPtr> DataTopic::peek_data_ptrs(EndType end_type, int k)
 {
-    return std::vector<TimedPtr>(data_.begin(), data_.end());
+    if (k < -1)
+    {
+        k = -1;
+    }
+    if (end_type == EndType::LATEST)
+    {
+        if (data_.size() < k || k == -1)
+            return std::vector<TimedPtr>(data_.begin(), data_.end());
+        return std::vector<TimedPtr>(data_.end() - k, data_.end());
+    }
+    else if (end_type == EndType::EARLIEST)
+    {
+        if (data_.size() < k || k == -1)
+            return std::vector<TimedPtr>(data_.begin(), data_.end());
+        return std::vector<TimedPtr>(data_.begin(), data_.begin() + k);
+    }
 }
 
-std::vector<TimedPtr> DataTopic::get_last_k_data(int k)
+std::vector<TimedPtr> DataTopic::pop_data_ptrs(EndType end_type, int k)
 {
-    if (data_.size() < k)
+    auto ret = peek_data_ptrs(end_type, k);
+    if (end_type == EndType::LATEST)
     {
-        k = data_.size();
+        data_.erase(data_.end() - k, data_.end());
     }
-    return std::vector<TimedPtr>(data_.end() - k, data_.end());
-}
-
-TimedPtr DataTopic::get_latest_data_ptrs()
-{
-    if (data_.empty())
+    else if (end_type == EndType::EARLIEST)
     {
-        return {};
+        data_.erase(data_.begin(), data_.begin() + k);
     }
-    return data_.back();
+    return ret;
 }
 
 void DataTopic::clear_data()
 {
     data_.clear();
+}
+
+int DataTopic::size() const
+{
+    return data_.size();
 }

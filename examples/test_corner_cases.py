@@ -12,14 +12,14 @@ def test_corner_cases():
     server.add_topic("test", 10)
     # server.put_data("test", pickle.dumps(np.random.rand(10)))
 
-    data, timestamp = client.request_latest("test")  # No data available
-    print(f"request_latest if no data available: {data}, {timestamp}")
+    data, timestamp = client.peek_data("test", "latest", 1)  # No data available
+    print(f"peek_data(1) if no data available: {data}, {timestamp}")
 
-    data, timestamp = client.request_all("test")  # No data available
-    print(f"request_all if no data available: {data}, {timestamp}")
+    data, timestamp = client.peek_data("test", "latest", -1)  # No data available
+    print(f"peek_data(-1) if no data available: {data}, {timestamp}")
 
-    data, timestamp = client.request_last_k("test", 5)  # No data available
-    print(f"request_last_k if no data available: {data}, {timestamp}")
+    data, timestamp = client.peek_data("test", "latest", 5)  # No data available
+    print(f"peek_data(5) if no data available: {data}, {timestamp}")
 
 
 if __name__ == "__main__":

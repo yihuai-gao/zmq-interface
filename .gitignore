@@ -1,3 +1,4 @@
 build
 *.egg-info
 *.cpython*.so
+pyrightconfig.json

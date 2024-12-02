@@ -41,7 +41,7 @@ ZMQServer::~ZMQServer()
 
 void ZMQServer::add_topic(const std::string &topic, double max_remaining_time)
 {
-    std::lock_guard<std::mutex> lock(data_mutex_);
+    std::lock_guard<std::mutex> lock(data_topic_mutex_);
     auto it = data_topics_.find(topic);
     if (it != data_topics_.end())
     {
@@ -54,7 +54,7 @@ void ZMQServer::add_topic(const std::string &topic, double max_remaining_time)
 
 void ZMQServer::put_data(const std::string &topic, const PyBytes &data)
 {
-    std::lock_guard<std::mutex> lock(data_mutex_);
+    std::lock_guard<std::mutex> lock(data_topic_mutex_);
     auto it = data_topics_.find(topic);
     if (it == data_topics_.end())
     {
@@ -68,18 +68,10 @@ void ZMQServer::put_data(const std::string &topic, const PyBytes &data)
     it->second.add_data_ptr(data_ptr, get_timestamp());
 }
 
-pybind11::list ZMQServer::get_latest_data(const std::string &topic)
+pybind11::tuple ZMQServer::peek_data(const std::string &topic, std::string end_type_str, int32_t n)
 {
-    pybind11::list result;
-    TimedPtr ptr = get_latest_data_ptr_(topic);
-    result.append(*std::get<0>(ptr));
-    result.append(std::get<1>(ptr));
-    return result;
-}
-
-pybind11::tuple ZMQServer::get_all_data(const std::string &topic)
-{
-    std::vector<TimedPtr> ptrs = get_all_data_ptrs_(topic);
+    EndType end_type = str_to_end_type(end_type_str);
+    std::vector<TimedPtr> ptrs = peek_data_ptrs_(topic, end_type, n);
     pybind11::list data;
     pybind11::list timestamps;
     for (const TimedPtr ptr : ptrs)
@@ -90,9 +82,10 @@ pybind11::tuple ZMQServer::get_all_data(const std::string &topic)
     return pybind11::make_tuple(data, timestamps);
 }
 
-pybind11::tuple ZMQServer::get_last_k_data(const std::string &topic, int k)
+pybind11::tuple ZMQServer::pop_data(const std::string &topic, std::string end_type_str, int32_t n)
 {
-    std::vector<TimedPtr> ptrs = get_last_k_data_ptrs_(topic, k);
+    EndType end_type = str_to_end_type(end_type_str);
+    std::vector<TimedPtr> ptrs = pop_data_ptrs_(topic, end_type, n);
     pybind11::list data;
     pybind11::list timestamps;
     for (const TimedPtr ptr : ptrs)
@@ -106,9 +99,10 @@ pybind11::tuple ZMQServer::get_last_k_data(const std::string &topic, int k)
 std::unordered_map<std::string, int> ZMQServer::get_topic_status()
 {
     std::unordered_map<std::string, int> result;
+    std::lock_guard<std::mutex> lock(data_topic_mutex_);
     for (auto &pair : data_topics_)
     {
-        result[pair.first] = pair.second.get_all_data_ptrs().size();
+        result[pair.first] = pair.second.size();
     }
     return result;
 }
@@ -120,7 +114,7 @@ double ZMQServer::get_timestamp()
 
 void ZMQServer::reset_start_time(int64_t system_time_us)
 {
-    std::lock_guard<std::mutex> lock(data_mutex_);
+    std::lock_guard<std::mutex> lock(data_topic_mutex_);
     logger_->info("Resetting start time. Will clear all data stored before this time");
     for (auto &pair : data_topics_)
     {
@@ -130,37 +124,9 @@ void ZMQServer::reset_start_time(int64_t system_time_us)
     steady_clock_start_time_us_ = steady_clock_us() + (system_time_us - system_clock_us());
 }
 
-TimedPtr ZMQServer::get_latest_data_ptr_(const std::string &topic)
+std::vector<TimedPtr> ZMQServer::peek_data_ptrs_(const std::string &topic, EndType end_type, int k)
 {
-    std::lock_guard<std::mutex> lock(data_mutex_);
-    auto it = data_topics_.find(topic);
-    if (it == data_topics_.end())
-    {
-        logger_->warn("Requested latest data for unknown topic {}. Please first call add_topic to add it into the "
-                      "recorded topics.",
-                      topic);
-        return {};
-    }
-    return it->second.get_latest_data_ptrs();
-}
-
-std::vector<TimedPtr> ZMQServer::get_all_data_ptrs_(const std::string &topic)
-{
-    std::lock_guard<std::mutex> lock(data_mutex_);
-    auto it = data_topics_.find(topic);
-    if (it == data_topics_.end())
-    {
-        logger_->warn("Requested all data for unknown topic {}. Please first call add_topic to add it into the "
-                      "recorded topics.",
-                      topic);
-        return std::vector<TimedPtr>();
-    }
-    return it->second.get_all_data_ptrs();
-}
-
-std::vector<TimedPtr> ZMQServer::get_last_k_data_ptrs_(const std::string &topic, int k)
-{
-    std::lock_guard<std::mutex> lock(data_mutex_);
+    std::lock_guard<std::mutex> lock(data_topic_mutex_);
     auto it = data_topics_.find(topic);
     if (it == data_topics_.end())
     {
@@ -169,7 +135,14 @@ std::vector<TimedPtr> ZMQServer::get_last_k_data_ptrs_(const std::string &topic,
                       topic);
         return {};
     }
-    return it->second.get_last_k_data(k);
+    return it->second.peek_data_ptrs(end_type, k);
+}
+
+std::vector<TimedPtr> ZMQServer::pop_data_ptrs_(const std::string &topic, EndType end_type, int k)
+{
+    std::lock_guard<std::mutex> lock(data_topic_mutex_);
+    auto it = data_topics_.find(topic);
+    return it->second.pop_data_ptrs(end_type, k);
 }
 
 // void ZMQServer::set_request_with_data_handler(std::function<PyBytesPtr(const PyBytesPtr)> handler)
@@ -178,72 +151,68 @@ std::vector<TimedPtr> ZMQServer::get_last_k_data_ptrs_(const std::string &topic,
 //     request_with_data_handler_ = handler;
 // }
 
-void ZMQServer::process_request_(const ZMQMessage &message)
+void ZMQServer::process_request_(ZMQMessage &message)
 {
     switch (message.cmd())
     {
-    case CmdType::GET_LATEST_DATA: {
-        ZMQMessage reply(message.topic(), CmdType::GET_LATEST_DATA, get_latest_data_ptr_(message.topic()));
-        std::string reply_data = reply.serialize();
-        socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
-        break;
-    }
-    case CmdType::GET_ALL_DATA: {
-        ZMQMultiPtrMessage reply(message.topic(), CmdType::GET_ALL_DATA, get_all_data_ptrs_(message.topic()));
-        std::string reply_data = reply.serialize();
-        socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
-        break;
-    }
-    case CmdType::GET_LAST_K_DATA: {
-        if (message.data_str().size() != sizeof(uint32_t))
+    case CmdType::PEEK_DATA:
+    case CmdType::POP_DATA: {
+        std::string error_message = "";
+        if (message.end_type() == EndType::NONE)
         {
-            std::string error_message = "Invalid data size when requesting last k data: got " +
-                                        std::to_string(message.data_str().size()) + " bytes, expected " +
-                                        std::to_string(sizeof(uint32_t)) + " bytes";
+            error_message.append("End type cannot be NONE for PEEK_DATA command. ");
+        }
+        if (message.data_str().length() != sizeof(int32_t))
+        {
+            error_message.append("Data length should be the same as an integer, but got ");
+            error_message.append(std::to_string(message.data_str().length()));
+            error_message.append(" bytes.");
+        }
+        if (!error_message.empty())
+        {
             logger_->error(error_message);
-            ZMQMultiPtrMessage reply(message.topic(), CmdType::ERROR, error_message);
+            ZMQMessage reply(message.topic(), CmdType::ERROR, EndType::NONE, get_timestamp(), error_message);
             std::string reply_data = reply.serialize();
             socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
             break;
         }
-        else
-        {
-            uint32_t k = bytes_to_uint32(message.data_str());
-            std::vector<TimedPtr> pointers = get_last_k_data_ptrs_(message.topic(), k);
-            ZMQMultiPtrMessage reply(message.topic(), CmdType::GET_LAST_K_DATA, pointers);
-            std::string reply_data = reply.serialize();
-            socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
-            break;
-        }
+
+        int32_t n = bytes_to_int32(message.data_str());
+        std::vector<TimedPtr> ptrs = message.cmd() == CmdType::PEEK_DATA
+                                         ? peek_data_ptrs_(message.topic(), message.end_type(), n)
+                                         : pop_data_ptrs_(message.topic(), message.end_type(), n);
+        ZMQMessage reply(message.topic(), message.cmd(), message.end_type(), get_timestamp(), ptrs);
+        std::string reply_data = reply.serialize();
+        socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
         break;
     }
 
-    case CmdType::REQUEST_WITH_DATA: {
-        if (!request_with_data_handler_initialized_)
-        {
-            std::string error_message = "Request with data handler not initialized";
-            logger_->error(error_message);
-            ZMQMessage reply(message.topic(), CmdType::ERROR, error_message, get_timestamp());
-            std::string reply_data = reply.serialize();
-            socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
-            break;
-        }
-        else
-        {
-            ZMQMessage reply(message.topic(), CmdType::REQUEST_WITH_DATA,
-                             request_with_data_handler_(message.data_ptr()));
-            std::string reply_data = reply.serialize();
-            socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
-            break;
-        }
-    }
+        // case CmdType::REQUEST_WITH_DATA: {
+        //     if (!request_with_data_handler_initialized_)
+        //     {
+        //         std::string error_message = "Request with data handler not initialized";
+        //         logger_->error(error_message);
+        //         ZMQMessage reply(message.topic(), CmdType::ERROR, error_message, get_timestamp());
+        //         std::string reply_data = reply.serialize();
+        //         socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
+        //         break;
+        //     }
+        //     else
+        //     {
+        //         ZMQMessage reply(message.topic(), CmdType::REQUEST_WITH_DATA,
+        //                          request_with_data_handler_(message.data_ptr()));
+        //         std::string reply_data = reply.serialize();
+        //         socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
+        //         break;
+        //     }
+        // }
 
         // case CmdType::SYNCHRONIZE_TIME
 
     default: {
         std::string error_message = "Received unknown command: " + std::to_string(static_cast<int>(message.cmd()));
         logger_->error(error_message);
-        ZMQMessage reply(message.topic(), CmdType::ERROR, error_message, get_timestamp());
+        ZMQMessage reply(message.topic(), CmdType::ERROR, EndType::NONE, get_timestamp(), error_message);
         std::string reply_data = reply.serialize();
         socket_.send(zmq::message_t(reply_data.data(), reply_data.size()), zmq::send_flags::none);
         break;
@@ -262,8 +231,7 @@ void ZMQServer::background_loop_()
         if (poller_item_.revents & ZMQ_POLLIN)
         {
             socket_.recv(request);
-            ZMQMessage message(std::string(request.data<char>(), request.data<char>() + request.size()),
-                               get_timestamp());
+            ZMQMessage message(std::string(request.data<char>(), request.data<char>() + request.size()));
             process_request_(message);
         }
     }

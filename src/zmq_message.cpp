@@ -1,54 +1,38 @@
 #include "zmq_message.h"
-ZMQMessage::ZMQMessage(const std::string &topic, CmdType cmd, const TimedPtr data_ptr) : topic_(topic), cmd_(cmd)
+
+ZMQMessage::ZMQMessage(const std::string &topic, CmdType cmd, EndType end_type, double timestamp,
+                       const std::vector<TimedPtr> &data_ptrs)
+    : topic_(topic), cmd_(cmd), end_type_(end_type), timestamp_(timestamp), data_ptrs_(data_ptrs)
 {
-    if (topic_.size() > 255)
-    {
-        throw std::invalid_argument("Topic size must be less than 256 characters");
-    }
-    if (topic_.empty())
-    {
-        throw std::invalid_argument("Topic cannot be empty");
-    }
-    if (std::get<0>(data_ptr) == nullptr)
-    {
-        data_str_ = "";
-        // throw std::invalid_argument("Data cannot be null");
-    }
-    else
-    {
-        data_str_ = *std::get<0>(data_ptr);
-    }
+    check_input_validity_();
 }
 
-ZMQMessage::ZMQMessage(const std::string &topic, CmdType cmd, const std::string &data_str, double timestamp)
-    : data_str_(data_str), topic_(topic), cmd_(cmd), timestamp_(timestamp)
+ZMQMessage::ZMQMessage(const std::string &topic, CmdType cmd, EndType end_type, double timestamp,
+                       const std::string &data_str)
+    : topic_(topic), cmd_(cmd), end_type_(end_type), timestamp_(timestamp), data_str_(data_str)
 {
-    if (topic_.size() > 255)
-    {
-        throw std::invalid_argument("Topic size must be less than 256 characters");
-    }
-    if (topic_.empty())
-    {
-        throw std::invalid_argument("Topic cannot be empty");
-    }
-    data_ptr_ = std::make_tuple(std::make_shared<PyBytes>(PyBytes(data_str_)), timestamp_);
+    check_input_validity_();
 }
 
-ZMQMessage::ZMQMessage(const std::string &serialized, double timestamp) : timestamp_(timestamp)
+ZMQMessage::ZMQMessage(const std::string &serialized)
 {
-    if (serialized.size() < 3)
-    {
-        throw std::invalid_argument("Serialized message must be at least 3 bytes");
-    }
     uint8_t topic_length = static_cast<uint8_t>(serialized[0]);
-    if (serialized.size() < sizeof(uint8_t) + topic_length + 1)
+    if (serialized.size() < sizeof(uint8_t) + topic_length)
     {
         throw std::invalid_argument("Serialized message is too short");
     }
-    topic_ = std::string(serialized.begin() + sizeof(uint8_t), serialized.begin() + sizeof(uint8_t) + topic_length);
-    cmd_ = static_cast<CmdType>(serialized[sizeof(uint8_t) + topic_length]);
-    data_str_ = std::string(serialized.begin() + 2 * sizeof(uint8_t) + topic_length, serialized.end());
-    data_ptr_ = std::make_tuple(std::make_shared<PyBytes>(PyBytes(data_str_)), timestamp);
+    int decode_start_index = sizeof(uint8_t);
+    topic_ =
+        std::string(serialized.begin() + decode_start_index, serialized.begin() + decode_start_index + topic_length);
+    decode_start_index += topic_length;
+    cmd_ = static_cast<CmdType>(serialized[decode_start_index]);
+    decode_start_index += sizeof(CmdType);
+    end_type_ = static_cast<EndType>(serialized[decode_start_index]);
+    decode_start_index += sizeof(EndType);
+    timestamp_ = bytes_to_double(
+        std::string(serialized.begin() + decode_start_index, serialized.begin() + decode_start_index + sizeof(double)));
+    decode_start_index += sizeof(double);
+    data_str_ = std::string(serialized.begin() + decode_start_index, serialized.end());
 }
 
 std::string ZMQMessage::topic() const
@@ -61,63 +45,17 @@ CmdType ZMQMessage::cmd() const
     return cmd_;
 }
 
-TimedPtr ZMQMessage::data_ptr() const
+EndType ZMQMessage::end_type() const
 {
-
-    return data_ptr_;
+    return end_type_;
 }
 
-std::string ZMQMessage::data_str() const
+double ZMQMessage::timestamp() const
 {
-    return data_str_;
+    return timestamp_;
 }
 
-std::string ZMQMessage::serialize() const
-{
-    std::string serialized;
-    serialized.push_back(static_cast<char>(uint8_t(topic_.size())));
-    serialized.append(topic_);
-    serialized.push_back(static_cast<char>(cmd_));
-    serialized.append(data_str_);
-    // printf("serailized: %s\n", bytes_to_hex(serialized).c_str());
-    return serialized;
-}
-
-ZMQMultiPtrMessage::ZMQMultiPtrMessage(const std::string &topic, CmdType cmd, const std::vector<TimedPtr> &data_ptrs)
-    : topic_(topic), cmd_(cmd), data_ptrs_(data_ptrs)
-{
-    check_input_validity_();
-}
-
-ZMQMultiPtrMessage::ZMQMultiPtrMessage(const std::string &topic, CmdType cmd, const std::string &data_str)
-    : topic_(topic), cmd_(cmd), data_str_(data_str)
-{
-    check_input_validity_();
-}
-
-ZMQMultiPtrMessage::ZMQMultiPtrMessage(const std::string &serialized)
-{
-    uint8_t topic_length = static_cast<uint8_t>(serialized[0]);
-    if (serialized.size() < sizeof(uint8_t) + topic_length + sizeof(uint8_t))
-    {
-        throw std::invalid_argument("Serialized message is too short");
-    }
-    topic_ = std::string(serialized.begin() + sizeof(uint8_t), serialized.begin() + sizeof(uint8_t) + topic_length);
-    cmd_ = static_cast<CmdType>(serialized[sizeof(int8_t) + topic_length]);
-    data_str_ = std::string(serialized.begin() + 2 * sizeof(uint8_t) + topic_length, serialized.end());
-}
-
-std::string ZMQMultiPtrMessage::topic() const
-{
-    return topic_;
-}
-
-CmdType ZMQMultiPtrMessage::cmd() const
-{
-    return cmd_;
-}
-
-std::vector<TimedPtr> ZMQMultiPtrMessage::data_ptrs()
+std::vector<TimedPtr> ZMQMessage::data_ptrs()
 {
     if (data_ptrs_.empty())
     {
@@ -131,7 +69,7 @@ std::vector<TimedPtr> ZMQMultiPtrMessage::data_ptrs()
     return data_ptrs_;
 }
 
-std::string ZMQMultiPtrMessage::data_str()
+std::string ZMQMessage::data_str()
 {
     if (data_str_.empty())
     {
@@ -140,21 +78,19 @@ std::string ZMQMultiPtrMessage::data_str()
     return data_str_;
 }
 
-std::string ZMQMultiPtrMessage::serialize()
+std::string ZMQMessage::serialize()
 {
     std::string serialized;
     serialized.push_back(static_cast<char>(uint8_t(topic_.size())));
     serialized.append(topic_);
     serialized.push_back(static_cast<char>(cmd_));
-    if (data_str_.empty())
-    {
-        encode_data_blocks_();
-    }
-    serialized.append(data_str_);
+    serialized.push_back(static_cast<char>(end_type_));
+    serialized.append(double_to_bytes(timestamp_));
+    serialized.append(data_str());
     return serialized;
 }
 
-void ZMQMultiPtrMessage::encode_data_blocks_()
+void ZMQMessage::encode_data_blocks_()
 {
     uint32_t data_string_length = sizeof(uint32_t); // block_num
     uint32_t block_num = data_ptrs_.size();
@@ -184,7 +120,7 @@ void ZMQMultiPtrMessage::encode_data_blocks_()
     assert(data_str_.size() == data_string_length);
 }
 
-void ZMQMultiPtrMessage::decode_data_blocks_()
+void ZMQMessage::decode_data_blocks_()
 {
     if (data_str_.size() < sizeof(uint32_t))
     {
@@ -221,14 +157,8 @@ void ZMQMultiPtrMessage::decode_data_blocks_()
     }
 }
 
-void ZMQMultiPtrMessage::check_input_validity_()
+void ZMQMessage::check_input_validity_()
 {
-    // Check whether CMD is a valid value in the enum CmdType
-    if (cmd_ != CmdType::GET_ALL_DATA && cmd_ != CmdType::GET_LAST_K_DATA && cmd_ != CmdType::ERROR)
-    {
-        throw std::invalid_argument(
-            "ZMQMultiPtrMessage only supports GET_ALL_DATA, GET_LAST_K_DATA, ERROR command types");
-    }
     if (topic_.size() > 255)
     {
         throw std::invalid_argument("Topic size must be less than 256 characters");
@@ -241,7 +171,7 @@ void ZMQMultiPtrMessage::check_input_validity_()
     {
         if (std::get<0>(data_ptr) == nullptr)
         {
-            throw std::invalid_argument("Data cannot be null");
+            throw std::invalid_argument("Data cannot be null. To pass empty data, use a pointer to an empty string.");
         }
     }
 }

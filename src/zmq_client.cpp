@@ -14,29 +14,16 @@ ZMQClient::~ZMQClient()
     context_.close();
 }
 
-pybind11::list ZMQClient::request_latest(const std::string &topic)
+pybind11::tuple ZMQClient::peek_data(const std::string &topic, std::string end_type, int32_t n)
 {
-    ZMQMessage message(topic, CmdType::GET_LATEST_DATA, std::string(), get_timestamp());
-    TimedPtr ptr = send_single_block_request_(message);
-    pybind11::list reply;
-    reply.append(*std::get<0>(ptr));
-    reply.append(std::get<1>(ptr));
-    if (pybind11::len(*std::get<0>(ptr)) == 0)
-    {
-        logger_->warn("No data available for topic: {}", topic);
-    }
-    return reply;
-}
-
-pybind11::tuple ZMQClient::request_all(const std::string &topic)
-{
-    ZMQMessage message(topic, CmdType::GET_ALL_DATA, std::string(), get_timestamp());
-    std::vector<TimedPtr> reply_ptrs = send_multi_block_request_(message);
+    std::string data_str = int32_to_bytes(n);
+    ZMQMessage message(topic, CmdType::PEEK_DATA, str_to_end_type(end_type), get_timestamp(), data_str);
+    std::vector<TimedPtr> reply_ptrs = send_request_(message);
     pybind11::list data;
     pybind11::list timestamps;
     if (reply_ptrs.empty())
     {
-        logger_->warn("No data available for topic: {}", topic);
+        logger_->debug("No data available for topic: {}", topic);
     }
     for (const TimedPtr ptr : reply_ptrs)
     {
@@ -46,16 +33,16 @@ pybind11::tuple ZMQClient::request_all(const std::string &topic)
     return pybind11::make_tuple(data, timestamps);
 }
 
-pybind11::tuple ZMQClient::request_last_k(const std::string &topic, uint32_t k)
+pybind11::tuple ZMQClient::pop_data(const std::string &topic, std::string end_type, int32_t n)
 {
-    std::string data_str = uint32_to_bytes(k);
-    ZMQMessage message(topic, CmdType::GET_LAST_K_DATA, data_str, get_timestamp());
-    std::vector<TimedPtr> reply_ptrs = send_multi_block_request_(message);
+    std::string data_str = int32_to_bytes(n);
+    ZMQMessage message(topic, CmdType::POP_DATA, str_to_end_type(end_type), get_timestamp(), data_str);
+    std::vector<TimedPtr> reply_ptrs = send_request_(message);
     pybind11::list data;
     pybind11::list timestamps;
     if (reply_ptrs.empty())
     {
-        logger_->warn("No data available for topic: {}", topic);
+        logger_->debug("No data available for topic: {}", topic);
     }
     for (const TimedPtr ptr : reply_ptrs)
     {
@@ -100,32 +87,32 @@ void ZMQClient::reset_start_time(int64_t system_time_us)
     steady_clock_start_time_us_ = steady_clock_us() + (system_time_us - system_clock_us());
 }
 
-TimedPtr ZMQClient::send_single_block_request_(const ZMQMessage &message)
-{
-    std::string serialized = message.serialize();
-    zmq::message_t request(serialized.data(), serialized.size());
-    socket_.send(request, zmq::send_flags::none);
-    zmq::message_t reply;
-    socket_.recv(reply);
-    ZMQMessage reply_message(std::string(reply.data<char>(), reply.data<char>() + reply.size()), get_timestamp());
-    if (reply_message.cmd() == CmdType::ERROR)
-    {
-        throw std::runtime_error("Server returned error: " + reply_message.data_str());
-    }
-    if (reply_message.cmd() != message.cmd())
-    {
-        throw std::runtime_error("Command type mismatch. Sent " + std::to_string(static_cast<int>(message.cmd())) +
-                                 " but received " + std::to_string(static_cast<int>(reply_message.cmd())));
-    }
-    if (reply_message.cmd() == CmdType::GET_LATEST_DATA || reply_message.cmd() == CmdType::REQUEST_WITH_DATA)
-    {
-        last_retrieved_ptrs_ = {reply_message.data_ptr()};
-        return reply_message.data_ptr();
-    }
-    throw std::runtime_error("Invalid command type: " + std::to_string(static_cast<int>(reply_message.cmd())));
-}
+// TimedPtr ZMQClient::send_single_block_request_(const ZMQMessage &message)
+// {
+//     std::string serialized = message.serialize();
+//     zmq::message_t request(serialized.data(), serialized.size());
+//     socket_.send(request, zmq::send_flags::none);
+//     zmq::message_t reply;
+//     socket_.recv(reply);
+//     ZMQMessage reply_message(std::string(reply.data<char>(), reply.data<char>() + reply.size()), get_timestamp());
+//     if (reply_message.cmd() == CmdType::ERROR)
+//     {
+//         throw std::runtime_error("Server returned error: " + reply_message.data_str());
+//     }
+//     if (reply_message.cmd() != message.cmd())
+//     {
+//         throw std::runtime_error("Command type mismatch. Sent " + std::to_string(static_cast<int>(message.cmd())) +
+//                                  " but received " + std::to_string(static_cast<int>(reply_message.cmd())));
+//     }
+//     if (reply_message.cmd() == CmdType::GET_LATEST_DATA || reply_message.cmd() == CmdType::REQUEST_WITH_DATA)
+//     {
+//         last_retrieved_ptrs_ = {reply_message.data_ptr()};
+//         return reply_message.data_ptr();
+//     }
+//     throw std::runtime_error("Invalid command type: " + std::to_string(static_cast<int>(reply_message.cmd())));
+// }
 
-std::vector<TimedPtr> ZMQClient::send_multi_block_request_(const ZMQMessage &message)
+std::vector<TimedPtr> ZMQClient::send_request_(ZMQMessage &message)
 {
     std::vector<TimedPtr> reply_ptrs;
     std::string serialized = message.serialize();
@@ -133,7 +120,7 @@ std::vector<TimedPtr> ZMQClient::send_multi_block_request_(const ZMQMessage &mes
     socket_.send(request, zmq::send_flags::none);
     zmq::message_t reply;
     socket_.recv(reply);
-    ZMQMultiPtrMessage reply_message(std::string(reply.data<char>(), reply.data<char>() + reply.size()));
+    ZMQMessage reply_message(std::string(reply.data<char>(), reply.data<char>() + reply.size()));
     if (reply_message.cmd() == CmdType::ERROR)
     {
         throw std::runtime_error("Server returned error: " + reply_message.data_str());
@@ -143,7 +130,7 @@ std::vector<TimedPtr> ZMQClient::send_multi_block_request_(const ZMQMessage &mes
         throw std::runtime_error("Command type mismatch. Sent " + std::to_string(static_cast<int>(message.cmd())) +
                                  " but received " + std::to_string(static_cast<int>(reply_message.cmd())));
     }
-    if (reply_message.cmd() == CmdType::GET_ALL_DATA || reply_message.cmd() == CmdType::GET_LAST_K_DATA)
+    if (reply_message.cmd() == CmdType::PEEK_DATA || reply_message.cmd() == CmdType::POP_DATA)
     {
         last_retrieved_ptrs_ = reply_message.data_ptrs();
         return reply_message.data_ptrs();
