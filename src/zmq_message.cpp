@@ -11,9 +11,13 @@ ZMQMessage::ZMQMessage(const std::string &topic, CmdType cmd, const TimedPtr dat
     }
     if (std::get<0>(data_ptr) == nullptr)
     {
-        throw std::invalid_argument("Data cannot be null");
+        data_str_ = "";
+        // throw std::invalid_argument("Data cannot be null");
     }
-    data_str_ = *std::get<0>(data_ptr);
+    else
+    {
+        data_str_ = *std::get<0>(data_ptr);
+    }
 }
 
 ZMQMessage::ZMQMessage(const std::string &topic, CmdType cmd, const std::string &data_str, double timestamp)

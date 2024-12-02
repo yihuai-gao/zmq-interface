@@ -1,5 +1,6 @@
 
 #include "zmq_server.h"
+#include <filesystem>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
 ZMQServer::ZMQServer(const std::string &server_name, const std::string &server_endpoint)
@@ -7,6 +8,22 @@ ZMQServer::ZMQServer(const std::string &server_name, const std::string &server_e
       logger_(spdlog::stdout_color_mt(server_name)), running_(false), steady_clock_start_time_us_(steady_clock_us()),
       poller_timeout_ms_(1000)
 {
+    logger_->set_pattern("[%H:%M:%S %n %^%l%$] %v");
+
+    // Only accept tcp and ipc endpoints
+    if (server_endpoint.find("tcp://") != 0 && server_endpoint.find("ipc://") != 0)
+    {
+        throw std::invalid_argument("Server endpoint must start with tcp:// or ipc://");
+    }
+    if (server_endpoint.find("ipc://") == 0)
+    {
+        // Create the directory if it does not exist
+        std::string directory = server_endpoint.substr(6, server_endpoint.find_last_of('/') - 6);
+        if (!directory.empty())
+        {
+            std::filesystem::create_directories(directory);
+        }
+    }
     socket_.bind(server_endpoint);
     running_ = true;
     poller_item_ = {socket_, 0, ZMQ_POLLIN, 0};

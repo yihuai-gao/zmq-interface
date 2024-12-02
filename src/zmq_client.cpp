@@ -4,6 +4,7 @@ ZMQClient::ZMQClient(const std::string &client_name, const std::string &server_e
     : context_(1), socket_(context_, zmq::socket_type::req), steady_clock_start_time_us_(steady_clock_us()),
       last_retrieved_ptrs_(), logger_(spdlog::stdout_color_mt(client_name))
 {
+    logger_->set_pattern("[%H:%M:%S %n %^%l%$] %v");
     socket_.connect(server_endpoint);
 }
 
@@ -20,16 +21,24 @@ pybind11::list ZMQClient::request_latest(const std::string &topic)
     pybind11::list reply;
     reply.append(*std::get<0>(ptr));
     reply.append(std::get<1>(ptr));
+    if (pybind11::len(*std::get<0>(ptr)) == 0)
+    {
+        logger_->warn("No data available for topic: {}", topic);
+    }
     return reply;
 }
 
 pybind11::tuple ZMQClient::request_all(const std::string &topic)
 {
     ZMQMessage message(topic, CmdType::GET_ALL_DATA, std::string(), get_timestamp());
-    std::vector<TimedPtr> request_ptrs = send_multi_block_request_(message);
+    std::vector<TimedPtr> reply_ptrs = send_multi_block_request_(message);
     pybind11::list data;
     pybind11::list timestamps;
-    for (const TimedPtr ptr : request_ptrs)
+    if (reply_ptrs.empty())
+    {
+        logger_->warn("No data available for topic: {}", topic);
+    }
+    for (const TimedPtr ptr : reply_ptrs)
     {
         data.append(*std::get<0>(ptr));
         timestamps.append(std::get<1>(ptr));
@@ -41,10 +50,14 @@ pybind11::tuple ZMQClient::request_last_k(const std::string &topic, uint32_t k)
 {
     std::string data_str = uint32_to_bytes(k);
     ZMQMessage message(topic, CmdType::GET_LAST_K_DATA, data_str, get_timestamp());
-    std::vector<TimedPtr> request_ptrs = send_multi_block_request_(message);
+    std::vector<TimedPtr> reply_ptrs = send_multi_block_request_(message);
     pybind11::list data;
     pybind11::list timestamps;
-    for (const TimedPtr ptr : request_ptrs)
+    if (reply_ptrs.empty())
+    {
+        logger_->warn("No data available for topic: {}", topic);
+    }
+    for (const TimedPtr ptr : reply_ptrs)
     {
         data.append(*std::get<0>(ptr));
         timestamps.append(std::get<1>(ptr));
