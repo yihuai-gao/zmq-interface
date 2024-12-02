@@ -15,36 +15,59 @@ void DataTopic::add_data_ptr(const PyBytesPtr data_ptr, double timestamp)
     }
 }
 
-std::vector<TimedPtr> DataTopic::peek_data_ptrs(EndType end_type, int k)
+std::vector<TimedPtr> DataTopic::peek_data_ptrs(EndType end_type, int32_t n)
 {
-    if (k < -1)
+    if (data_.empty())
     {
-        k = -1;
+        return std::vector<TimedPtr>();
+    }
+    if (n < 0 || n > data_.size())
+    {
+        n = data_.size();
     }
     if (end_type == EndType::LATEST)
     {
-        if (data_.size() < k || k == -1)
-            return std::vector<TimedPtr>(data_.begin(), data_.end());
-        return std::vector<TimedPtr>(data_.end() - k, data_.end());
+        return std::vector<TimedPtr>(data_.end() - n, data_.end());
     }
     else if (end_type == EndType::EARLIEST)
     {
-        if (data_.size() < k || k == -1)
-            return std::vector<TimedPtr>(data_.begin(), data_.end());
-        return std::vector<TimedPtr>(data_.begin(), data_.begin() + k);
+        return std::vector<TimedPtr>(data_.begin(), data_.begin() + n);
+    }
+    else
+    {
+        throw std::runtime_error("Invalid end type");
     }
 }
 
-std::vector<TimedPtr> DataTopic::pop_data_ptrs(EndType end_type, int k)
+std::vector<TimedPtr> DataTopic::pop_data_ptrs(EndType end_type, int32_t n)
 {
-    auto ret = peek_data_ptrs(end_type, k);
+    if (data_.empty())
+    {
+        return std::vector<TimedPtr>();
+    }
+    if (n < 0 || n > data_.size())
+    {
+        n = data_.size();
+    }
+    std::vector<TimedPtr> ret = peek_data_ptrs(end_type, n);
+
     if (end_type == EndType::LATEST)
     {
-        data_.erase(data_.end() - k, data_.end());
+        for (int i = 0; i < n; i++)
+        {
+            data_.pop_back();
+        }
     }
     else if (end_type == EndType::EARLIEST)
     {
-        data_.erase(data_.begin(), data_.begin() + k);
+        for (int i = 0; i < n; i++)
+        {
+            data_.pop_front();
+        }
+    }
+    else
+    {
+        throw std::runtime_error("Invalid end type");
     }
     return ret;
 }

@@ -1,3 +1,4 @@
+from difflib import restore
 import zmq_interface as zi
 import time
 import pickle
@@ -18,7 +19,7 @@ def test_timestamps():
     print("Server and client created")
 
     topic_name = "test"
-    server.add_topic(topic_name, 10.0)
+    server.add_topic(topic_name, 1.0)
 
     current_system_time = zi.system_clock_us()
 
@@ -26,7 +27,7 @@ def test_timestamps():
     server.reset_start_time(current_system_time)
     client.reset_start_time(current_system_time)
 
-    for i in range(1000):
+    for i in range(100):
         rand_data = np.random.rand(1000000)
         data_bytes = pickle.dumps(rand_data)
         server.put_data(topic_name, data_bytes)
@@ -36,19 +37,27 @@ def test_timestamps():
             topic_name, "latest", -1
         )  # only pass the reference so will take zero time
         print(
-            f"Iter: {i}, data size: {rand_data.nbytes / 1024**2:.3f}MB, stored data size: {len(data)}, memory usage: {get_memory_usage():.3f}MB"
+            f"Adding data: {i}, data size: {rand_data.nbytes / 1024**2:.3f}MB, stored data size: {len(data)}, memory usage: {get_memory_usage():.3f}MB"
         )
         time.sleep(0.01)
+        del data
 
-    for i in range(1000):
+    for i in range(30):
         raw_data, timestamp = server.pop_data(topic_name, "latest", 1)
         if len(raw_data) == 0:
             print("No data left")
             break
-        restored_data: npt.NDArray[np.float64] = pickle.loads(raw_data[0])
-        print(
-            f"Iter: {i}, data size: {restored_data.nbytes / 1024**2:.3f}MB, memory usage: {get_memory_usage():.3f}MB"
-        )
+        # restored_data: npt.NDArray[np.float64] = pickle.loads(raw_data[0])
+        print(f"Poping latest data: {i}, memory usage: {get_memory_usage():.3f}MB")
+        time.sleep(0.01)
+
+    data, timestamp = server.pop_data(topic_name, "latest", -1)
+    data_len = len(data)
+    del data
+    print(f"{data_len=}, memory usage: {get_memory_usage():.3f}MB")
+
+    topics = server.get_topic_status()
+    print(f"Topic status after popping: {topics}")
 
 
 if __name__ == "__main__":

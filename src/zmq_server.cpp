@@ -45,11 +45,11 @@ void ZMQServer::add_topic(const std::string &topic, double max_remaining_time)
     auto it = data_topics_.find(topic);
     if (it != data_topics_.end())
     {
-        logger_->warn("Topic {} already exists. Ignoring the request to add it again.", topic);
+        logger_->warn("Topic `{}` already exists. Ignoring the request to add it again.", topic);
         return;
     }
     data_topics_.insert({topic, DataTopic(topic, max_remaining_time)});
-    logger_->info("Added topic {} with max remaining time {}.", topic, max_remaining_time);
+    logger_->info("Added topic `{}` with max remaining time {}s.", topic, max_remaining_time);
 }
 
 void ZMQServer::put_data(const std::string &topic, const PyBytes &data)
@@ -68,7 +68,7 @@ void ZMQServer::put_data(const std::string &topic, const PyBytes &data)
     it->second.add_data_ptr(data_ptr, get_timestamp());
 }
 
-pybind11::tuple ZMQServer::peek_data(const std::string &topic, std::string end_type_str, int32_t n)
+pybind11::tuple ZMQServer::peek_data(const std::string &topic, std::string end_type_str, int n)
 {
     EndType end_type = str_to_end_type(end_type_str);
     std::vector<TimedPtr> ptrs = peek_data_ptrs_(topic, end_type, n);
@@ -82,7 +82,7 @@ pybind11::tuple ZMQServer::peek_data(const std::string &topic, std::string end_t
     return pybind11::make_tuple(data, timestamps);
 }
 
-pybind11::tuple ZMQServer::pop_data(const std::string &topic, std::string end_type_str, int32_t n)
+pybind11::tuple ZMQServer::pop_data(const std::string &topic, std::string end_type_str, int n)
 {
     EndType end_type = str_to_end_type(end_type_str);
     std::vector<TimedPtr> ptrs = pop_data_ptrs_(topic, end_type, n);
@@ -124,7 +124,7 @@ void ZMQServer::reset_start_time(int64_t system_time_us)
     steady_clock_start_time_us_ = steady_clock_us() + (system_time_us - system_clock_us());
 }
 
-std::vector<TimedPtr> ZMQServer::peek_data_ptrs_(const std::string &topic, EndType end_type, int k)
+std::vector<TimedPtr> ZMQServer::peek_data_ptrs_(const std::string &topic, EndType end_type, int32_t n)
 {
     std::lock_guard<std::mutex> lock(data_topic_mutex_);
     auto it = data_topics_.find(topic);
@@ -135,21 +135,22 @@ std::vector<TimedPtr> ZMQServer::peek_data_ptrs_(const std::string &topic, EndTy
                       topic);
         return {};
     }
-    return it->second.peek_data_ptrs(end_type, k);
+    return it->second.peek_data_ptrs(end_type, n);
 }
 
-std::vector<TimedPtr> ZMQServer::pop_data_ptrs_(const std::string &topic, EndType end_type, int k)
+std::vector<TimedPtr> ZMQServer::pop_data_ptrs_(const std::string &topic, EndType end_type, int32_t n)
 {
     std::lock_guard<std::mutex> lock(data_topic_mutex_);
     auto it = data_topics_.find(topic);
-    return it->second.pop_data_ptrs(end_type, k);
+    if (it == data_topics_.end())
+    {
+        logger_->warn("Requested last k data for unknown topic {}. Please first call add_topic to add it into the "
+                      "recorded topics.",
+                      topic);
+        return {};
+    }
+    return it->second.pop_data_ptrs(end_type, n);
 }
-
-// void ZMQServer::set_request_with_data_handler(std::function<PyBytesPtr(const PyBytesPtr)> handler)
-// {
-//     request_with_data_handler_initialized_ = true;
-//     request_with_data_handler_ = handler;
-// }
 
 void ZMQServer::process_request_(ZMQMessage &message)
 {

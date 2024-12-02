@@ -20,8 +20,8 @@ class ZMQServer
     ~ZMQServer();
     void add_topic(const std::string &topic, double max_remaining_time);
     void put_data(const std::string &topic, const PyBytes &data);
-    pybind11::tuple peek_data(const std::string &topic, std::string end_type_str, int32_t n);
-    pybind11::tuple pop_data(const std::string &topic, std::string end_type_str, int32_t n);
+    pybind11::tuple peek_data(const std::string &topic, std::string end_type_str, int n);
+    pybind11::tuple pop_data(const std::string &topic, std::string end_type_str, int n);
     double get_timestamp();
     void reset_start_time(int64_t system_time_us);
 
@@ -45,8 +45,8 @@ class ZMQServer
 
     void process_request_(ZMQMessage &message);
 
-    std::vector<TimedPtr> peek_data_ptrs_(const std::string &topic, EndType end_type, int k);
-    std::vector<TimedPtr> pop_data_ptrs_(const std::string &topic, EndType end_type, int k);
+    std::vector<TimedPtr> peek_data_ptrs_(const std::string &topic, EndType end_type, int32_t n);
+    std::vector<TimedPtr> pop_data_ptrs_(const std::string &topic, EndType end_type, int32_t n);
 
     std::function<TimedPtr(const TimedPtr)> request_with_data_handler_;
 
