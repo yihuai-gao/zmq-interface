@@ -16,52 +16,42 @@ find_package(spdlog REQUIRED)
 find_package(cppzmq REQUIRED)
 
 find_path(CPPZMQ_INCLUDE_DIR zmq.hpp)
+
 # Set output directories
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-# Add source files (adjust the path according to your source structure)
+
+# Add source files with new directory structure
 set(SOURCES
-    src/zmq_client.cpp
-    src/zmq_message.cpp
-    src/zmq_server.cpp
-    src/data_topic.cpp
-    src/common.cpp
-    src/pybind.cpp
+    zmq_interface/core/src/zmq_client.cpp
+    zmq_interface/core/src/zmq_message.cpp
+    zmq_interface/core/src/zmq_server.cpp
+    zmq_interface/core/src/data_topic.cpp
+    zmq_interface/core/src/common.cpp
+    zmq_interface/core/src/pybind.cpp
 )
 
-# Create the pybind11 module
-pybind11_add_module(zmq_interface ${SOURCES})
+# Create the pybind11 module with the new target name
+pybind11_add_module(zmq_interface_core ${SOURCES})
 
 add_compile_options(-pthread)
 
-target_link_libraries(zmq_interface PRIVATE
+target_link_libraries(zmq_interface_core PRIVATE
     libzmq
     spdlog::spdlog
     Threads::Threads
     pthread
 )
 
-# Include directories
-target_include_directories(zmq_interface PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    $ENV{CONDA_PREFIX}/include
+# Update include directories for new structure
+target_include_directories(zmq_interface_core PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/zmq_interface/core/include
 )
 
-# Set properties for the target
-set_target_properties(zmq_interface PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${CMAKE_SYSTEM_PROCESSOR}"
-    POSITION_INDEPENDENT_CODE ON
+
+# Update the output location and name
+set_target_properties(zmq_interface_core PROPERTIES 
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/zmq_interface/core"
+    PREFIX ""
+    OUTPUT_NAME "zmq_interface"
 )
-
-# Install rules
-
-# if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm.*|arm|aarch64")
-#     set(LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../lib/aarch64)
-
-# elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(AMD64)|(^i686)")
-#     set(LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../lib/x86_64)
-# endif()
-
-set_target_properties(zmq_interface PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
-set_target_properties(zmq_interface PROPERTIES PREFIX "")
-set_target_properties(zmq_interface PROPERTIES OUTPUT_NAME "zmq_interface")
