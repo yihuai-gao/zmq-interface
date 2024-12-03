@@ -9,13 +9,15 @@ def test_client():
     print("Client created")
 
     while True:
+        start_time = time.time()
         raw_data_list, timestamps = client.peek_data("test", "latest", 1)
+        end_peeking_time = time.time()
 
         if raw_data_list:
             data = np.frombuffer(raw_data_list[0], dtype=np.float64)
 
             print(
-                f"Received data: shape: {data.shape}, size: {data.nbytes / 1024**2:.3f}MB"
+                f"Received data: shape: {data.shape}, size: {data.nbytes / 1024**2:.3f}MB, peeking time: {end_peeking_time - start_time:.3f}s"
             )
         time.sleep(0.1)
 

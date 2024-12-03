@@ -15,7 +15,6 @@ authors = [
     {name = "Yihuai Gao", email = "yihuai@stanford.edu"},
 ]
 description = "A C++ based multi-threaded ZMQ interface for Python bytes"
-requires-python = ">=3.10"
 dependencies = [
     "pybind11",        # For Python bindings
 ]

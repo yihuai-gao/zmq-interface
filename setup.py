@@ -86,5 +86,4 @@ setup(
     ext_modules=[CMakeExtension("zmq_interface.core.zmq_interface")],
     cmdclass={"build_ext": CMakeBuild},
     zip_safe=False,
-    python_requires=">=3.10",
 )

@@ -2,3 +2,4 @@ build
 *.egg-info
 *.cpython*.so
 pyrightconfig.json
+__pycache__

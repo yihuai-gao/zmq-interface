@@ -1,1 +1,1 @@
-conda install spdlog cppzmq zeromq boost -y
+conda install spdlog cppzmq zeromq boost pybind11 -y

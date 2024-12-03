@@ -12,7 +12,7 @@ def test_server():
 
     data_cnt = 0
     while True:
-        rand_data = np.random.rand(1000000)
+        rand_data = np.random.rand(100000)
         # Simulates a data source that keeps getting data from the sensor at a regular interval
         server.put_data("test", rand_data.tobytes())
         time.sleep(0.1)
