@@ -76,5 +76,4 @@
         "variant": "cpp",
         "codecvt": "cpp"
     },
-    "python.languageServer": "None",
 }

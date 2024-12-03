@@ -17,11 +17,14 @@ authors = [
 description = "A C++ based multi-threaded ZMQ interface for Python bytes"
 requires-python = ">=3.10"
 dependencies = [
-    "pyzmq",
-    "spdlog",          # C++ logging library
     "pybind11",        # For Python bindings
 ]
+[project.optional-dependencies]
 
+examples = [
+    "numpy",
+    "psutil",
+]
 [tool.setuptools]
 packages = ["zmq_interface"]
 package-data = {zmq_interface = ["core/*.pyi", "py/*.pyi"]}

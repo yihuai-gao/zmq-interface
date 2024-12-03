@@ -1,0 +1,1 @@
+conda install spdlog cppzmq zeromq boost -y
